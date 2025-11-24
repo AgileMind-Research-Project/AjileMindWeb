@@ -145,134 +145,6 @@ export default function RegisterPage() {
         </div>
     );
 
-    // OTP Functions
-    const sendOTP = async () => {
-        setOtpError('');
-        setOtpLoading(true);
-
-        try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/otp/send-otp`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email: formData.email }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to send OTP');
-            }
-
-            setOtpToken(data.data.token);
-            setCurrentStep(3); // Move to OTP verification step
-            startResendCooldown();
-        } catch (err: any) {
-            setOtpError(err.message || 'Failed to send OTP. Please try again.');
-        } finally {
-            setOtpLoading(false);
-        }
-    };
-
-    const verifyOTP = async () => {
-        const otpCode = otpValues.join('');
-        
-        if (otpCode.length !== 6) {
-            setOtpError('Please enter all 6 digits');
-            return;
-        }
-
-        setOtpError('');
-        setOtpLoading(true);
-
-        try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/otp/verify-otp`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    token: otpToken,
-                    otp: otpCode,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Invalid OTP');
-            }
-
-            // OTP verified, move to password step
-            setCurrentStep(4);
-        } catch (err: any) {
-            setOtpError(err.message || 'Invalid OTP. Please try again.');
-        } finally {
-            setOtpLoading(false);
-        }
-    };
-
-    const resendOTP = async () => {
-        if (resendCooldown > 0) return;
-
-        setOtpValues(['', '', '', '', '', '']);
-        setOtpError('');
-        await sendOTP();
-    };
-
-    const startResendCooldown = () => {
-        setResendCooldown(60);
-        const interval = setInterval(() => {
-            setResendCooldown((prev) => {
-                if (prev <= 1) {
-                    clearInterval(interval);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    };
-
-    const handleOtpChange = (index: number, value: string) => {
-        if (!/^\d*$/.test(value)) return; // Only allow digits
-
-        const newOtpValues = [...otpValues];
-        newOtpValues[index] = value.slice(-1); // Only keep last digit
-        setOtpValues(newOtpValues);
-
-        // Auto-advance to next input
-        if (value && index < 5) {
-            inputRefs.current[index + 1]?.focus();
-        }
-    };
-
-    const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
-            inputRefs.current[index - 1]?.focus();
-        }
-    };
-
-    const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-        e.preventDefault();
-        const pastedData = e.clipboardData.getData('text').trim();
-        
-        if (!/^\d{6}$/.test(pastedData)) return; // Must be 6 digits
-
-        const newOtpValues = pastedData.split('');
-        setOtpValues(newOtpValues);
-        inputRefs.current[5]?.focus();
-    };
-
-    const maskEmail = (email: string): string => {
-        const [username, domain] = email.split('@');
-        if (!domain) return email;
-        const maskedUsername = username.length > 2
-            ? `${username[0]}${'*'.repeat(username.length - 2)}${username.at(-1)}`
-            : username;
-        return `${maskedUsername}@${domain}`;
-    };
-
     const ProgressBar = () => (
         <div className="w-full max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
@@ -339,7 +211,7 @@ export default function RegisterPage() {
             <div className="bg-white border-b border-gray-100 py-4 px-6">
                 <div className="max-w-2xl mx-auto">
                     <div className="flex items-center justify-between">
-                        {[1, 2, 3, 4, 5].map((step) => (
+                        {[1, 2, 3, 4].map((step) => (
                             <div key={step} className="flex items-center flex-1">
                                 <div className="flex flex-col items-center">
                                     <div
@@ -355,12 +227,11 @@ export default function RegisterPage() {
                                     <span className={`text-sm mt-1.5 font-semibold ${step === currentStep ? 'text-blue-600' : 'text-gray-500'}`}>
                                         {step === 1 && 'Company'}
                                         {step === 2 && 'Email'}
-                                        {step === 3 && 'Verify'}
-                                        {step === 4 && 'Password'}
-                                        {step === 5 && 'Confirm'}
+                                        {step === 3 && 'Password'}
+                                        {step === 4 && 'Confirm'}
                                     </span>
                                 </div>
-                                {step < 5 && (
+                                {step < 4 && (
                                     <div className="flex-1 h-0.5 mx-2 bg-gray-200 rounded-full">
                                         <div
                                             className={`h-full rounded-full transition-all ${step < currentStep ? 'bg-green-500' : 'bg-gray-200'}`}
@@ -379,6 +250,42 @@ export default function RegisterPage() {
                 {/* Step 1: Company Name */}
                 {currentStep === 1 && (
                     <div className="w-full max-w-lg mx-auto">
+                        {/* Passwordless Option - Featured */}
+                        <div className="mb-8 p-6 bg-linear-to-r from-blue-600 to-blue-700 rounded-2xl shadow-lg border-2 border-blue-500">
+                            <div className="flex items-start gap-4">
+                                <div className="shrink-0 w-12 h-12 bg-white rounded-xl flex items-center justify-center">
+                                    <Zap className="w-7 h-7 text-blue-600" />
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <h3 className="text-xl font-bold text-white">Passwordless Registration</h3>
+                                        <span className="px-2 py-0.5 bg-green-400 text-green-900 text-xs font-bold rounded-full">FAST</span>
+                                    </div>
+                                    <p className="text-blue-100 text-base mb-4">
+                                        Quick signup with email verification - No password needed!
+                                    </p>
+                                    <button
+                                        onClick={() => router.push('/otp-register')}
+                                        className="w-full px-6 py-3 bg-white text-blue-600 text-base font-bold rounded-lg hover:bg-blue-50 transition-all flex items-center justify-center gap-2 shadow-md"
+                                    >
+                                        <Zap className="w-5 h-5" />
+                                        Sign Up with Email OTP
+                                        <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="relative mb-8">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-gray-300"></div>
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-4 bg-blue-50 text-gray-600 font-semibold">Or continue with traditional registration</span>
+                            </div>
+                        </div>
+
                         <div className="text-center mb-6">
                             <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-xl mb-4">
                                 <Building2 className="w-7 h-7 text-white" />
@@ -456,128 +363,19 @@ export default function RegisterPage() {
                                 </button>
                                 <button
                                     onClick={handleNext}
-                                    disabled={!formData.email.trim() || !formData.email.includes('@') || otpLoading}
+                                    disabled={!formData.email.trim() || !formData.email.includes('@')}
                                     className="flex-1 px-6 py-3 bg-blue-600 text-white text-base font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                                 >
-                                    {otpLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Sending Code...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Send Verification Code
-                                            <ArrowRight className="w-4 h-4" />
-                                        </>
-                                    )}
+                                    Continue
+                                    <ArrowRight className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* Step 3: OTP Verification */}
+                {/* Step 3: Password */}
                 {currentStep === 3 && (
-                    <div className="w-full max-w-lg mx-auto">
-                        <div className="text-center mb-6">
-                            <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-xl mb-4">
-                                <Mail className="w-7 h-7 text-white" />
-                            </div>
-                            <h2 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Email</h2>
-                            <p className="text-lg text-gray-600 mb-2">
-                                We sent a code to
-                            </p>
-                            <p className="text-base font-bold text-blue-600">
-                                {maskEmail(formData.email)}
-                            </p>
-                        </div>
-
-                        <div className="space-y-5">
-                            {/* OTP Input */}
-                            <div>
-                                <label className="block text-base font-semibold text-gray-700 mb-3 text-center">
-                                    Enter 6-digit code
-                                </label>
-                                <div className="flex gap-2 justify-center">
-                                    {otpValues.map((value, index) => (
-                                        <input
-                                            key={`otp-${index}`}
-                                            ref={(el) => { inputRefs.current[index] = el; }}
-                                            type="text"
-                                            inputMode="numeric"
-                                            maxLength={1}
-                                            value={value}
-                                            onChange={(e) => handleOtpChange(index, e.target.value)}
-                                            onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                                            onPaste={index === 0 ? handleOtpPaste : undefined}
-                                            className="w-12 h-14 text-center text-2xl font-bold bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 transition-all"
-                                            autoFocus={index === 0}
-                                        />
-                                    ))}
-                                </div>
-                                <p className="mt-3 text-sm text-gray-500 text-center">
-                                    Code expires in 5 minutes
-                                </p>
-                            </div>
-
-                            {/* Error Message */}
-                            {otpError && (
-                                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                                    <p className="text-sm text-red-800 font-medium text-center">{otpError}</p>
-                                </div>
-                            )}
-
-                            {/* Resend OTP */}
-                            <div className="text-center">
-                                {resendCooldown > 0 ? (
-                                    <p className="text-sm text-gray-600">
-                                        Resend code in <span className="font-bold text-blue-600">{resendCooldown}s</span>
-                                    </p>
-                                ) : (
-                                    <button
-                                        onClick={resendOTP}
-                                        disabled={otpLoading}
-                                        className="text-blue-600 hover:text-blue-700 font-semibold text-base underline disabled:opacity-50"
-                                    >
-                                        Resend Code
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={handleBack}
-                                    disabled={otpLoading}
-                                    className="px-5 py-3 border border-gray-300 text-gray-700 text-base font-semibold rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    <ArrowLeft className="w-4 h-4" />
-                                    Back
-                                </button>
-                                <button
-                                    onClick={verifyOTP}
-                                    disabled={otpValues.join('').length !== 6 || otpLoading}
-                                    className="flex-1 px-6 py-3 bg-blue-600 text-white text-base font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                >
-                                    {otpLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Verifying...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Verify Code
-                                            <ArrowRight className="w-4 h-4" />
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Step 4: Password */}
-                {currentStep === 4 && (
                     <div className="w-full max-w-lg mx-auto">
                         <div className="text-center mb-6">
                             <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-xl mb-4">
@@ -673,8 +471,8 @@ export default function RegisterPage() {
                     </div>
                 )}
 
-                {/* Step 5: Terms & Privacy */}
-                {currentStep === 5 && (
+                {/* Step 4: Terms & Privacy */}
+                {currentStep === 4 && (
                     <div className="w-full max-w-lg mx-auto">
                         <div className="text-center mb-6">
                             <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-xl mb-4">
