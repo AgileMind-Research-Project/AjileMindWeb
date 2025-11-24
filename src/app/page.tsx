@@ -113,7 +113,13 @@ export default function PlatformHomePage() {
             </button>
           </div>
           <p className="text-sm text-gray-500 mt-4">
-            No credit card required • Free forever for small teams
+            No credit card required • Free forever for small teams • 
+            <button 
+              onClick={() => router.push('/otp-register')}
+              className="text-blue-600 hover:underline ml-1"
+            >
+              Traditional signup
+            </button>
           </p>
         </div>
       </section>
