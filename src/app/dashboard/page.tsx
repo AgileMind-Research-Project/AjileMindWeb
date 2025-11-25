@@ -10,7 +10,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser, useTenant, useHasHydrated } from '@/lib/store/auth.store';
-import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut } from 'lucide-react';
+import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut, Link2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -92,7 +92,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
           <button
             onClick={() => router.push('/dashboard')}
             className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
@@ -154,6 +154,21 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </button>
+
+              <button
+                onClick={() => router.push('/integrations/jira')}
+                className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <Link2 className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Jira Integration</h3>
+                    <p className="text-sm text-gray-600">Connect Jira</p>
+                  </div>
+                </div>
+              </button>
             </>
           )}
 
@@ -199,7 +214,7 @@ export default function DashboardPage() {
           <h3 className="text-xl font-bold text-gray-900 mb-6">Getting Started</h3>
           <div className="space-y-4">
             <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
-              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 font-bold">
                 1
               </div>
               <div>
@@ -219,7 +234,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
-              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 font-bold">
                 2
               </div>
               <div>
@@ -231,7 +246,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
-              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 font-bold">
                 3
               </div>
               <div>

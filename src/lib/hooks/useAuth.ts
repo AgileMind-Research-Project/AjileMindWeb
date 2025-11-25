@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth.store';
 import { authApi, type LoginRequest, type TenantRegisterRequest, type ChangePasswordRequest } from '@/lib/api/auth.api';
 import { PLATFORM_URLS } from '@/lib/config/api.config';
-import { toast } from 'sonner';
+import { showSuccessAlert, showErrorAlert } from '@/lib/utils/toast.utils';
 
 export const useAuth = () => {
   const router = useRouter();
@@ -43,7 +43,7 @@ export const useAuth = () => {
         false
       );
       
-      toast.success('Account created successfully! Redirecting to dashboard...');
+      showSuccessAlert('Account created successfully! Redirecting to dashboard...');
       
       // Redirect to AgileMind Platform
       setTimeout(() => {
@@ -53,7 +53,7 @@ export const useAuth = () => {
       return response;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
-      toast.error(errorMessage);
+      showErrorAlert(errorMessage);
       throw error;
     } finally {
       setLoading(false);
@@ -79,7 +79,7 @@ export const useAuth = () => {
         password_change_required
       );
       
-      toast.success('Login successful!');
+      showSuccessAlert('Login successful!');
       
       // Redirect based on password change requirement
       if (password_change_required) {
@@ -91,7 +91,7 @@ export const useAuth = () => {
       return response;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Login failed. Please check your credentials.';
-      toast.error(errorMessage);
+      showErrorAlert(errorMessage);
       throw error;
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ export const useAuth = () => {
     try {
       await authApi.logout();
       clearAuth();
-      toast.success('Logged out successfully');
+      showSuccessAlert('Logged out successfully');
       router.push('/login');
     } catch (error) {
       // Clear auth even if API call fails
@@ -126,7 +126,7 @@ export const useAuth = () => {
       const response = await authApi.changePassword(data);
       console.log('Password change response:', response);
       
-      toast.success('Password changed successfully!');
+      showSuccessAlert('Password changed successfully!');
       
       // Update password change required status
       setAuth(
@@ -150,7 +150,7 @@ export const useAuth = () => {
         error.message ||
         'Failed to change password.';
       
-      toast.error(errorMessage);
+      showErrorAlert(errorMessage);
       throw error;
     } finally {
       setLoading(false);
@@ -161,11 +161,11 @@ export const useAuth = () => {
     setLoading(true);
     try {
       await authApi.forgotPassword({ email });
-      toast.success('Password reset link sent to your email');
+      showSuccessAlert('Password reset link sent to your email');
       return true;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to send reset email.';
-      toast.error(errorMessage);
+      showErrorAlert(errorMessage);
       throw error;
     } finally {
       setLoading(false);
@@ -180,12 +180,12 @@ export const useAuth = () => {
         new_password: newPassword,
         new_password_confirmation: confirmPassword,
       });
-      toast.success('Password reset successfully! Please login.');
+      showSuccessAlert('Password reset successfully! Please login.');
       router.push('/login');
       return true;
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to reset password.';
-      toast.error(errorMessage);
+      showErrorAlert(errorMessage);
       throw error;
     } finally {
       setLoading(false);
