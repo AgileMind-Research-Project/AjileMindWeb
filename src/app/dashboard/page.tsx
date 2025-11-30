@@ -10,7 +10,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser, useTenant, useHasHydrated } from '@/lib/store/auth.store';
-import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut, Link2 } from 'lucide-react';
+import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut, Link2, FileText, MessageSquare } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -171,6 +171,36 @@ export default function DashboardPage() {
               </button>
             </>
           )}
+
+          <button
+            onClick={() => router.push('/reports/create-template')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <FileText className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Report Templates</h3>
+                <p className="text-sm text-gray-600">Create & Manage</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => router.push('/chatbot')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 text-pink-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">AI Assistant</h3>
+                <p className="text-sm text-gray-600">Chat & Help</p>
+              </div>
+            </div>
+          </button>
 
           <button
             onClick={() => router.push('/settings')}
