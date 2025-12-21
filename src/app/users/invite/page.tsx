@@ -11,7 +11,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser } from '@/lib/store/auth.store';
 import { authApi } from '@/lib/api/auth.api';
-import { User, Mail, Shield, ArrowLeft, Info } from 'lucide-react';
+import { projectsApi } from '@/lib/api/projects.api';
+import { User, Mail, Shield, ArrowLeft, Info, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function InviteUserPage() {
@@ -21,12 +22,14 @@ export default function InviteUserPage() {
 
   const [loading, setLoading] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
     email: '',
     role: '',
+    project_ids: [] as number[],
   });
 
   useEffect(() => {
@@ -42,19 +45,20 @@ export default function InviteUserPage() {
       return;
     }
 
-    // Fetch available roles
+    // Fetch available roles and projects
     fetchRoles();
+    fetchProjects();
   }, [isAuthenticated, currentUser, router]);
 
   const fetchRoles = async () => {
     try {
       const response = await authApi.listRoles();
       console.log('Roles response:', response);
-      
+
       // Handle different response formats
       const rolesData = response.data || response || [];
       setRoles(Array.isArray(rolesData) ? rolesData : []);
-      
+
       if (rolesData.length === 0) {
         toast.info('No roles available. Please create roles first.');
       }
@@ -64,10 +68,36 @@ export default function InviteUserPage() {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      const response = await projectsApi.listProjects();
+      console.log('Projects response:', response);
+
+      // Handle different response formats
+      const projectsData = response.data || response || [];
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+
+      if (projectsData.length === 0) {
+        console.log('No projects available.');
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch projects:', error);
+      // Don't show error toast for projects as it's optional
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedOptions = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+    setFormData({
+      ...formData,
+      project_ids: selectedOptions,
     });
   };
 
@@ -213,6 +243,96 @@ export default function InviteUserPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Projects */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="projects" className="block text-sm font-medium text-gray-700">
+                    Assign to Projects (Optional)
+                  </label>
+                  {formData.project_ids.length > 0 && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {formData.project_ids.length} selected
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Briefcase className="absolute left-3 top-4 text-gray-400 w-5 h-5 pointer-events-none z-10" />
+                  <select
+                    id="projects"
+                    name="projects"
+                    multiple
+                    size={6}
+                    value={formData.project_ids.map(String)}
+                    onChange={handleProjectChange}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent overflow-y-auto"
+                    style={{
+                      minHeight: '150px',
+                      backgroundImage: 'none'
+                    }}
+                  >
+                    {projects.length === 0 ? (
+                      <option disabled className="text-gray-400">No projects available</option>
+                    ) : (
+                      projects.map((project) => (
+                        <option
+                          key={project.project_id}
+                          value={project.project_id}
+                          className="py-2 px-2 hover:bg-blue-50 cursor-pointer"
+                        >
+                          {project.key} - {project.project_name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-gray-500">
+                    💡 Hold <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Ctrl</kbd> (Windows)
+                    or <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Cmd</kbd> (Mac)
+                    and click to select multiple projects
+                  </p>
+                  {formData.project_ids.length > 0 && (
+                    <>
+                      <div className="flex flex-wrap gap-2 mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <span className="text-xs font-medium text-blue-800">Selected Projects:</span>
+                        {formData.project_ids.map((projectId) => {
+                          const project = projects.find(p => p.project_id === projectId);
+                          return project ? (
+                            <span
+                              key={projectId}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded-full"
+                            >
+                              {project.key}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    project_ids: formData.project_ids.filter(id => id !== projectId)
+                                  });
+                                }}
+                                className="hover:bg-blue-700 rounded-full p-0.5"
+                              >
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, project_ids: [] })}
+                        className="text-xs text-red-600 hover:text-red-800 underline font-medium"
+                      >
+                        Clear all selections
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 

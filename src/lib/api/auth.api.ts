@@ -86,6 +86,7 @@ export interface InviteUserRequest {
   last_name: string;
   email: string;
   role: string;
+  project_ids?: number[];
 }
 
 export interface ValidatePasswordRequest {
@@ -131,8 +132,8 @@ export const authApi = {
   },
 
   verifyCurrentPassword: async (currentPassword: string): Promise<any> => {
-    return httpClient.post(API_ENDPOINTS.VERIFY_CURRENT_PASSWORD, { 
-      current_password: currentPassword 
+    return httpClient.post(API_ENDPOINTS.VERIFY_CURRENT_PASSWORD, {
+      current_password: currentPassword
     });
   },
 
@@ -176,5 +177,14 @@ export const authApi = {
 
   createRole: async (data: any): Promise<any> => {
     return httpClient.post(API_ENDPOINTS.CREATE_ROLE, data);
+  },
+
+  // User Project Assignments
+  getUserProjects: async (userId: string): Promise<any> => {
+    return httpClient.get(API_ENDPOINTS.GET_USER_PROJECTS(userId));
+  },
+
+  updateUserProjects: async (userId: string, projectIds: number[]): Promise<any> => {
+    return httpClient.put(API_ENDPOINTS.UPDATE_USER_PROJECTS(userId), { project_ids: projectIds });
   },
 };

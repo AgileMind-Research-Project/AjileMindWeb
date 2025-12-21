@@ -13,7 +13,7 @@ export const API_CONFIG = {
 export const API_ENDPOINTS = {
   // Platform Registration
   REGISTER_TENANT: '/platform/register-tenant',
-  
+
   // Authentication
   LOGIN: '/auth/login',
   LOGOUT: '/auth/logout',
@@ -24,17 +24,25 @@ export const API_ENDPOINTS = {
   FORGOT_PASSWORD: '/auth/forgot-password',
   RESET_PASSWORD: '/auth/reset-password',
   VALIDATE_PASSWORD: '/auth/validate-password',
-  
+
   // Users
   INVITE_USER: '/users/invite',
   LIST_USERS: '/users',
   GET_USER: (userId: string) => `/users/${userId}`,
   UPDATE_USER: (userId: string) => `/users/${userId}`,
   DELETE_USER: (userId: string) => `/users/${userId}`,
-  
+
   // Roles
   LIST_ROLES: '/roles',
   CREATE_ROLE: '/roles',
+
+  // Projects (uses existing /api/v1/projects endpoint)
+  LIST_PROJECTS: '/projects',
+  GET_PROJECT: (projectId: number) => `/projects/${projectId}`,
+
+  // User Project Assignments
+  GET_USER_PROJECTS: (userId: string) => `/users/${userId}/projects`,
+  UPDATE_USER_PROJECTS: (userId: string) => `/users/${userId}/projects`,
 };
 
 export const getApiUrl = (endpoint: string): string => {
