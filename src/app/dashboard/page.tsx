@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser, useHasHydrated } from '@/lib/store/auth.store';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import RiskParametersForm from '@/components/risk/RiskParametersForm';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // Wait for store to hydrate from localStorage before checking auth
     if (!hasHydrated) return;
-    
+
     if (!isAuthenticated) {
       router.push('/login');
     } else if (passwordChangeRequired) {
@@ -191,6 +192,13 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Risk Parameters Configuration - For Project Managers and Admins */}
+        {(user?.role === 'PROJECT_MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+          <div className="mt-6">
+            <RiskParametersForm />
+          </div>
+        )}
 
         {/* Recent Activity */}
         <div className="bg-white rounded-lg shadow">
