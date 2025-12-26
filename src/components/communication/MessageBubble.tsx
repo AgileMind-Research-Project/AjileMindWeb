@@ -28,11 +28,16 @@ export function MessageBubble({
 }: MessageBubbleProps) {
     const [showActions, setShowActions] = React.useState(false);
 
-    const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
+    // Parse UTC timestamp and convert to local time for display
+    // Backend sends UTC timestamps without 'Z' suffix, so we need to add it
+    // to ensure JavaScript interprets it as UTC, not local time
+    const utcTimestamp = message.created_at.endsWith('Z') ? message.created_at : `${message.created_at}Z`;
+    const messageDate = new Date(utcTimestamp);
+    const timeAgo = formatDistanceToNow(messageDate, { addSuffix: true });
 
     return (
         <div
-            className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group`}
+            className={`flex gap-3 ${isOwn ? 'justify-end' : 'justify-start'} group w-full`}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
@@ -54,8 +59,8 @@ export function MessageBubble({
 
                 <div
                     className={`relative rounded-2xl px-4 py-2 ${isOwn
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-900'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-900'
                         }`}
                 >
                     {message.is_deleted ? (

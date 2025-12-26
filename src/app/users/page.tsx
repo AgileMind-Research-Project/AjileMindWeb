@@ -51,14 +51,14 @@ export default function UsersListPage() {
         authApi.listUsers(),
         rolesApi.getRoles()
       ]);
-      
+
       console.log('Users response:', usersResponse);
-      
+
       // Handle response format: { success: true, data: [...] }
       const usersData = usersResponse?.data?.data || usersResponse?.data || [];
       setUsers(Array.isArray(usersData) ? usersData : []);
       setRoles(rolesResponse);
-      
+
       if (usersData.length === 0) {
         toast.info('No users found. Invite your first user to get started!');
       }
@@ -119,10 +119,10 @@ export default function UsersListPage() {
     try {
       setSubmitting(true);
       await rolesApi.updateUserRole(selectedUser.user_id, { role_id: selectedRoleId });
-      
+
       const newRole = roles.find(r => r.role_id === selectedRoleId);
-      setUsers(users.map(u => 
-        u.user_id === selectedUser.user_id 
+      setUsers(users.map(u =>
+        u.user_id === selectedUser.user_id
           ? { ...u, role_id: selectedRoleId, role: newRole?.role_name || u.role }
           : u
       ));
@@ -288,11 +288,10 @@ export default function UsersListPage() {
                   {roles.map((role) => (
                     <label
                       key={role.role_id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer ${
-                        selectedRoleId === role.role_id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer ${selectedRoleId === role.role_id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <input
                         type="radio"

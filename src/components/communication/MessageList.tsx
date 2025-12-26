@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useChatStore } from '@/lib/store/chatStore';
 import { MessageBubble } from './MessageBubble';
 
@@ -25,8 +25,11 @@ export function MessageList({
     onDelete,
     onLoadMore,
 }: MessageListProps) {
-    const messages = useChatStore((state) => state.messages[channelId] || []);
-    const typingUsers = useChatStore((state) => state.typingUsers[channelId] || []);
+    const messagesRecord = useChatStore((state) => state.messages);
+    const typingUsersRecord = useChatStore((state) => state.typingUsers);
+
+    const messages = useMemo(() => messagesRecord[channelId] || [], [messagesRecord, channelId]);
+    const typingUsers = useMemo(() => typingUsersRecord[channelId] || [], [typingUsersRecord, channelId]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
