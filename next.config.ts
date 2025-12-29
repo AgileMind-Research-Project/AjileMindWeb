@@ -1,8 +1,14 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker
   output: 'standalone',
+  
+  // Fix Turbopack root detection for monorepo
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   
   // Optimize images
   images: {

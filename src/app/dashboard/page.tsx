@@ -53,13 +53,51 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Quick Actions - For Admin/Super Admin */}
-        {(user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <button
-              onClick={() => router.push('/users')}
-              className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
-            >
+        {/* Quick Actions - For All Users */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {/* Document Upload - For All Users */}
+          <button
+            onClick={() => router.push('/settings')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Upload Documents</h3>
+                <p className="text-sm text-gray-600">RAG Chatbot</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Chatbot - For All Users */}
+          <button
+            onClick={() => router.push('/chatbot')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">AI Chatbot</h3>
+                <p className="text-sm text-gray-600">Chat with documents</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Admin/Super Admin Quick Actions */}
+          {(user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && (
+            <>
+              <button
+                onClick={() => router.push('/users')}
+                className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
+              >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                   <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,8 +161,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             </button>
-          </div>
-        )}
+          </>
+          )}
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
