@@ -197,6 +197,7 @@ export const useAuth = () => {
     isAuthenticated,
     passwordChangeRequired,
     loading,
+    token: useAuthStore.getState().accessToken,
     registerTenant,
     login,
     logout,

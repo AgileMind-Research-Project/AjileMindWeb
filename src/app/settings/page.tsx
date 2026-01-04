@@ -9,6 +9,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useIsAuthenticated, useHasHydrated } from '@/lib/store/auth.store';
+import DocumentUpload from '@/components/ai/DocumentUpload';
 import { 
   ArrowLeft, 
   Lock, 
@@ -148,6 +149,12 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Document Upload Section */}
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Document Management</h2>
+            <DocumentUpload />
           </div>
 
           {/* Settings Groups */}
