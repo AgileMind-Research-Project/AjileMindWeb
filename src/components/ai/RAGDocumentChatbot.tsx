@@ -59,8 +59,39 @@ const useDocumentsByDate = (selectedDate: string, accessToken: string | null) =>
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedDate || !accessToken) {
+    if (!accessToken) {
       setDocuments([]);
+      return;
+    }
+
+    // If "all" is selected or no date, fetch all documents
+    if (selectedDate === 'all' || !selectedDate) {
+      const fetchAllDocuments = async () => {
+        setLoading(true);
+        try {
+          const headers: HeadersInit = {};
+          if (accessToken) {
+            headers['Authorization'] = `Bearer ${accessToken}`;
+          }
+
+          const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/documents?limit=1000`, { headers });
+          if (!response.ok) throw new Error('Failed to fetch documents');
+          const data = await response.json();
+          setDocuments(data);
+          setError(null);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Error fetching documents');
+          setDocuments([]);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      if (selectedDate === 'all') {
+        fetchAllDocuments();
+      } else {
+        setDocuments([]);
+      }
       return;
     }
 
@@ -95,7 +126,8 @@ const useChatWithDocument = (accessToken: string | null) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const chat = async (documentId: number, query: string) => {
+  // Chat with specific document or search all documents
+  const chat = async (documentId: number | null, query: string, searchAll: boolean = false) => {
     setLoading(true);
     setError(null);
     try {
@@ -106,10 +138,21 @@ const useChatWithDocument = (accessToken: string | null) => {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
+      // Build request body based on whether we're searching all or specific document
+      const requestBody: any = { query };
+      
+      if (searchAll) {
+        requestBody.search_all = true;
+        requestBody.document_id = null;
+      } else if (documentId !== null) {
+        requestBody.document_id = documentId;
+        requestBody.search_all = false;
+      }
+
       const response = await fetch('/api/v1/documents/chat', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ document_id: documentId, query }),
+        body: JSON.stringify(requestBody),
       });
       if (!response.ok) throw new Error('Failed to get response');
       const data = await response.json();
@@ -132,6 +175,7 @@ interface Message {
   content: string;
   timestamp: Date;
   documentId?: number;
+  sourceDocument?: string;
 }
 
 interface Document {
@@ -149,7 +193,7 @@ interface DocumentDate {
 
 export default function RAGDocumentChatbot() {
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedDocument, setSelectedDocument] = useState<number | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<string>(''); // Changed to string to handle 'all'
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -172,22 +216,28 @@ export default function RAGDocumentChatbot() {
   const handleDateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const date = e.target.value;
     setSelectedDate(date);
-    setSelectedDocument(null);
+    setSelectedDocument('');
     setMessages([]); // Clear chat when changing date
   };
 
   // Handle document selection
   const handleDocumentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const docId = parseInt(e.target.value);
-    setSelectedDocument(docId);
+    const value = e.target.value;
+    setSelectedDocument(value);
     setMessages([]); // Clear chat when changing document
   };
+
+  // Check if we should search all documents
+  const isSearchAll = selectedDocument === 'all' || selectedDate === 'all';
+  const selectedDocId = selectedDocument && selectedDocument !== 'all' ? parseInt(selectedDocument) : null;
 
   // Handle sending message
   const handleSendQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!query.trim() || !selectedDocument || chatLoading) return;
+    // Allow sending if we have a specific document OR if search all is enabled
+    if (!query.trim() || chatLoading) return;
+    if (!isSearchAll && !selectedDocId) return;
 
     // Add user message to chat
     const userMessage: Message = {
@@ -195,7 +245,7 @@ export default function RAGDocumentChatbot() {
       type: 'user',
       content: query,
       timestamp: new Date(),
-      documentId: selectedDocument,
+      documentId: selectedDocId ?? undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -203,16 +253,23 @@ export default function RAGDocumentChatbot() {
     setLoading(true);
 
     try {
-      // Send query to backend
-      const response = await chat(selectedDocument, query);
+      // Send query to backend - pass searchAll flag
+      const response = await chat(selectedDocId, query, isSearchAll);
+      
+      // Build response message with source info if searching all
+      let responseContent = response.chatbot_response;
+      if (response.source_document) {
+        responseContent = `${response.chatbot_response}\n\n📄 ${response.source_document}`;
+      }
       
       // Add assistant message to chat
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: response.chatbot_response,
+        content: responseContent,
         timestamp: new Date(),
-        documentId: selectedDocument,
+        documentId: response.document_id,
+        sourceDocument: response.source_document,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -230,7 +287,9 @@ export default function RAGDocumentChatbot() {
     }
   };
 
-  const selectedDocTitle = documents?.find(d => d.id === selectedDocument)?.doc_title;
+  const selectedDocTitle = selectedDocument === 'all' 
+    ? 'All Documents' 
+    : documents?.find(d => d.id === selectedDocId)?.doc_title;
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg shadow-lg overflow-hidden">
@@ -261,6 +320,7 @@ export default function RAGDocumentChatbot() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Choose a date...</option>
+                <option value="all" className="font-semibold text-blue-600">📁 All Dates (Search All Documents)</option>
                 {availableDates?.map((dateObj) => (
                   <option key={dateObj.uploaded_date} value={dateObj.uploaded_date}>
                     {new Date(dateObj.uploaded_date).toLocaleDateString()} ({dateObj.count} documents)
@@ -282,12 +342,13 @@ export default function RAGDocumentChatbot() {
                 Select Document
               </label>
               <select
-                value={selectedDocument || ''}
+                value={selectedDocument}
                 onChange={handleDocumentChange}
                 disabled={!selectedDate || docsLoading}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Choose a document...</option>
+                <option value="all" className="font-semibold text-blue-600">📁 All Documents (Search All)</option>
                 {documents?.map((doc) => (
                   <option key={doc.id} value={doc.id}>
                     {doc.doc_title}
@@ -301,17 +362,18 @@ export default function RAGDocumentChatbot() {
                 </p>
               )}
               {!selectedDate && (
-                <p className="text-slate-500 text-xs mt-1">Select a date first</p>
+                <p className="text-slate-500 text-xs mt-1">Select a date first or choose "All Dates"</p>
               )}
             </div>
           </div>
 
           {/* Selected Document Info */}
           {selectedDocTitle && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
-              <span className="text-sm text-blue-900">
-                <strong>Current:</strong> {selectedDocTitle}
+            <div className={`flex items-center gap-2 p-3 border rounded-lg ${isSearchAll ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+              <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${isSearchAll ? 'text-green-600' : 'text-blue-600'}`} />
+              <span className={`text-sm ${isSearchAll ? 'text-green-900' : 'text-blue-900'}`}>
+                <strong>{isSearchAll ? '🔍 Search Mode:' : 'Current:'}</strong> {selectedDocTitle}
+                {isSearchAll && <span className="ml-2 text-xs text-green-700">(Will search all documents and find the relevant one)</span>}
               </span>
             </div>
           )}
@@ -324,8 +386,10 @@ export default function RAGDocumentChatbot() {
               <FileText className="w-16 h-16 mb-4 opacity-20" />
               <p className="text-center max-w-md">
                 {selectedDocument
-                  ? 'Ask a question about the selected document to get started!'
-                  : 'Select a date and document to begin chatting'}
+                  ? (isSearchAll 
+                    ? 'Ask any question - I will search all documents to find the answer!'
+                    : 'Ask a question about the selected document to get started!')
+                  : 'Select a date and document to begin chatting, or choose "All" to search all documents'}
               </p>
             </div>
           ) : (
@@ -378,24 +442,30 @@ export default function RAGDocumentChatbot() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={selectedDocument ? "Ask a question..." : "Select a document first..."}
-              disabled={!selectedDocument || loading}
+              placeholder={
+                isSearchAll 
+                  ? "Ask any question - searching all documents..." 
+                  : (selectedDocument ? "Ask a question..." : "Select a document first...")
+              }
+              disabled={(!selectedDocument && !isSearchAll) || loading}
               className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
             />
             <button
               type="submit"
-              disabled={!selectedDocument || !query.trim() || loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors"
+              disabled={(!selectedDocument && !isSearchAll) || !query.trim() || loading}
+              className={`px-4 py-2 text-white rounded-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors ${
+                isSearchAll ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {loading ? (
                 <>
                   <Loader className="w-4 h-4 animate-spin" />
-                  Thinking...
+                  {isSearchAll ? 'Searching...' : 'Thinking...'}
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Send
+                  {isSearchAll ? 'Search All' : 'Send'}
                 </>
               )}
             </button>
