@@ -7,7 +7,7 @@
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000',
   version: process.env.NEXT_PUBLIC_API_VERSION || 'v1',
-  timeout: 30000,
+  timeout: 180000, // 3 minutes - increased for large file uploads (backlog)
 };
 
 export const API_ENDPOINTS = {

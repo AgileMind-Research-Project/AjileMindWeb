@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { json } from 'node:stream/consumers';
+import BacklogUpload from '@/components/backlog/BacklogUpload';
 
 interface Project {
   project_id: number;
@@ -27,6 +28,8 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
+  const [showBacklogModal, setShowBacklogModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const fetchProjects = async () => {
     setIsLoading(true);
@@ -214,12 +217,32 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => onEdit && onEdit(project)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => onEdit && onEdit(project)}
+                        className="text-blue-600 hover:text-blue-900 transition-colors"
+                        title="Edit Project"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+
+                      {/* Backlog Upload Button */}
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowBacklogModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-900 transition-colors"
+                        title="Upload Backlog"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -280,6 +303,39 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Backlog Upload Modal */}
+      {showBacklogModal && selectedProject && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+            onClick={() => {
+              setShowBacklogModal(false);
+              setSelectedProject(null);
+            }}
+          ></div>
+
+          <div className="flex items-center justify-center min-h-screen px-4 py-8">
+            <div
+              className="relative bg-white rounded-xl shadow-2xl transform transition-all w-full max-w-3xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <BacklogUpload
+                projectId={selectedProject.project_id}
+                projectName={selectedProject.project_name}
+                onSuccess={() => {
+                  setShowBacklogModal(false);
+                  setSelectedProject(null);
+                }}
+                onCancel={() => {
+                  setShowBacklogModal(false);
+                  setSelectedProject(null);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

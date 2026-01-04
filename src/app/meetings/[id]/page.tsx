@@ -258,8 +258,8 @@ export default function MeetingRoomPage() {
                     <button
                         onClick={handleToggleAudio}
                         className={`p-4 rounded-full transition-all ${isAudioEnabled
-                                ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                                : 'bg-red-500 hover:bg-red-600 text-white'
+                            ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                            : 'bg-red-500 hover:bg-red-600 text-white'
                             }`}
                         title={isAudioEnabled ? 'Mute' : 'Unmute'}
                     >
@@ -279,8 +279,8 @@ export default function MeetingRoomPage() {
                     <button
                         onClick={handleToggleVideo}
                         className={`p-4 rounded-full transition-all ${isVideoEnabled
-                                ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                                : 'bg-red-500 hover:bg-red-600 text-white'
+                            ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                            : 'bg-red-500 hover:bg-red-600 text-white'
                             }`}
                         title={isVideoEnabled ? 'Stop Video' : 'Start Video'}
                     >
@@ -299,8 +299,8 @@ export default function MeetingRoomPage() {
                     <button
                         onClick={handleToggleScreenShare}
                         className={`p-4 rounded-full transition-all ${isScreenSharing
-                                ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                                : 'bg-gray-700 hover:bg-gray-600 text-white'
+                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                            : 'bg-gray-700 hover:bg-gray-600 text-white'
                             }`}
                         title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
                     >
