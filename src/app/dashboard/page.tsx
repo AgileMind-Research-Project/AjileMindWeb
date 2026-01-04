@@ -10,7 +10,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser, useTenant, useHasHydrated } from '@/lib/store/auth.store';
-import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut, Link2, FileText, MessageSquare } from 'lucide-react';
+import { Users, UserPlus, Shield, LayoutDashboard, Settings, LogOut, Link2, FileText, MessageSquare, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -198,6 +198,22 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-semibold text-gray-900">AI Assistant</h3>
                 <p className="text-sm text-gray-600">Chat & Help</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Manage Meetings Card */}
+          <button
+            onClick={() => router.push('/meetings')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
+                <Calendar className="w-6 h-6 text-teal-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Manage Meetings</h3>
+                <p className="text-sm text-gray-600">Schedule & organize</p>
               </div>
             </div>
           </button>
