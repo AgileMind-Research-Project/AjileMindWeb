@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { json } from 'node:stream/consumers';
 import BacklogUpload from '@/components/backlog/BacklogUpload';
+import PrioritizedBacklogModal from '@/components/projects/PrioritizedBacklogModal';
 
 interface Project {
   project_id: number;
@@ -29,6 +30,7 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
   const [showBacklogModal, setShowBacklogModal] = useState(false);
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const fetchProjects = async () => {
@@ -242,6 +244,20 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       </button>
+
+                      {/* View Prioritized Backlog Button */}
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowPriorityModal(true);
+                        }}
+                        className="text-purple-600 hover:text-purple-900 transition-colors"
+                        title="View Prioritized Backlog"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -337,6 +353,19 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Prioritized Backlog Modal */}
+      {showPriorityModal && selectedProject && (
+        <PrioritizedBacklogModal
+          projectId={selectedProject.project_id}
+          projectName={selectedProject.project_name}
+          isOpen={showPriorityModal}
+          onClose={() => {
+            setShowPriorityModal(false);
+            setSelectedProject(null);
+          }}
+        />
       )}
     </div>
   );
