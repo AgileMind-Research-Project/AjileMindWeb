@@ -21,6 +21,7 @@ interface Project {
     template: string;
     sprint_size?: number;
     project_lead?: string;
+    project_manager?: string[];
     architecture_type?: string;
     stack_type?: string;
     frontend_technologies?: string[];
@@ -61,6 +62,7 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
         template: 'com.pyxis.greenhopper.jira:gh-scrum-template',
         sprint_size: 2,
         project_lead: '',
+        project_manager: [] as string[],
         architecture_type: '',
         stack_type: '',
         frontend_technologies: [] as string[],
@@ -70,7 +72,9 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
     });
 
     const [users, setUsers] = useState<User[]>([]);
+    const [projectManagers, setProjectManagers] = useState<User[]>([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
+    const [loadingManagers, setLoadingManagers] = useState(false);
 
     // Fetch users for project lead dropdown
     useEffect(() => {
@@ -91,6 +95,35 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
         fetchUsers();
     }, []);
 
+    // Fetch PROJECT_MANAGER users for project manager dropdown
+    useEffect(() => {
+        const fetchProjectManagers = async () => {
+            setLoadingManagers(true);
+            try {
+                const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+                const response = await fetch(`${apiUrl}/api/v1/users/by-role/PROJECT_MANAGER`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    setProjectManagers(data.data);
+                }
+            } catch (error) {
+                console.error('Error fetching project managers:', error);
+            } finally {
+                setLoadingManagers(false);
+            }
+        };
+
+        fetchProjectManagers();
+    }, []);
+
     // Load project data when in edit mode
     useEffect(() => {
         if (editProject && mode === 'edit') {
@@ -104,6 +137,7 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
                 template: editProject.template || 'com.pyxis.greenhopper.jira:gh-scrum-template',
                 sprint_size: editProject.sprint_size || 2,
                 project_lead: editProject.project_lead || '',
+                project_manager: editProject.project_manager || [],
                 architecture_type: editProject.architecture_type || '',
                 stack_type: editProject.stack_type || '',
                 frontend_technologies: editProject.frontend_technologies || [],
@@ -153,6 +187,20 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
             ...prev,
             [key]: prev[key].filter(t => t !== tech)
         }));
+    };
+
+    const handleManagerSelect = (email: string, checked: boolean) => {
+        if (checked) {
+            setFormData(prev => ({
+                ...prev,
+                project_manager: [...prev.project_manager, email]
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                project_manager: prev.project_manager.filter(m => m !== email)
+            }));
+        }
     };
 
     const validateForm = (): boolean => {
@@ -226,6 +274,7 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
 
             if (formData.sprint_size) payload.sprint_size = formData.sprint_size;
             if (formData.project_lead) payload.project_lead = formData.project_lead;
+            if (formData.project_manager && formData.project_manager.length > 0) payload.project_manager = formData.project_manager;
             if (formData.architecture_type) payload.architecture_type = formData.architecture_type;
             if (formData.stack_type) payload.stack_type = formData.stack_type;
             if (formData.frontend_technologies.length > 0) payload.frontend_technologies = formData.frontend_technologies;
@@ -495,6 +544,65 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
                         {loadingUsers && (
                             <p className="mt-2 text-xs text-gray-500">Loading users...</p>
                         )}
+                    </div>
+
+                    {/* Project Managers - Multi-select Checkboxes */}
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                            Project Managers
+                        </label>
+                        <div className="mt-1 border-2 border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50">
+                            {loadingManagers ? (
+                                <p className="text-sm text-gray-500">Loading project managers...</p>
+                            ) : projectManagers.length === 0 ? (
+                                <p className="text-sm text-gray-500">No project managers available</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {projectManagers.map((manager) => (
+                                        <label
+                                            key={manager.user_id}
+                                            className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors duration-150"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.project_manager.includes(manager.email)}
+                                                onChange={(e) => handleManagerSelect(manager.email, e.target.checked)}
+                                                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm text-gray-900">
+                                                {manager.first_name} {manager.last_name}
+                                                <span className="text-gray-500 ml-1">({manager.email})</span>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {formData.project_manager.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {formData.project_manager.map((email) => {
+                                    const manager = projectManagers.find(m => m.email === email);
+                                    return (
+                                        <span
+                                            key={email}
+                                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                        >
+                                            {manager ? `${manager.first_name} ${manager.last_name}` : email}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleManagerSelect(email, false)}
+                                                className="ml-2 text-blue-600 hover:text-blue-800 font-bold"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <p className="mt-2 text-xs text-gray-500">
+                            💡 Only users with PROJECT_MANAGER role are shown
+                        </p>
                     </div>
                 </div>
             </div>
