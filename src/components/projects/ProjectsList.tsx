@@ -310,7 +310,7 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
       {showBacklogModal && selectedProject && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+            className="fixed inset-0 bg-black/60 transition-opacity"
             onClick={() => {
               setShowBacklogModal(false);
               setSelectedProject(null);
