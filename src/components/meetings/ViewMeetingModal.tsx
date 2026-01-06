@@ -53,9 +53,10 @@ export default function ViewMeetingModal({
             const fetchSprints = async () => {
                 setLoadingSprints(true);
                 try {
-                    const response = await projectsApi.getProjectSprints(Number(meeting.project_id));
+                    // Use active sprints endpoint to get tasks
+                    const response = await projectsApi.getActiveSprints(Number(meeting.project_id), meeting.date);
                     if (response.success) {
-                        setSprints(response.data);
+                        setSprints(response.data.sprints || []);
                     }
                 } catch (error) {
                     console.error('Failed to fetch sprints:', error);
@@ -488,6 +489,31 @@ export default function ViewMeetingModal({
                                                         <div className="text-right">
                                                             <div className="text-sm font-medium text-gray-900">Est. Hours</div>
                                                             <div className="text-lg font-bold text-blue-600">{sprint.total_estimated_hours || 0}h</div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Sprint Tasks */}
+                                                    <div className="mt-4 border-t border-gray-100 pt-3">
+                                                        <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center justify-between">
+                                                            <span>Sprint Tasks ({sprint.tasks?.length || 0})</span>
+                                                        </h5>
+                                                        <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
+                                                            {sprint.tasks && sprint.tasks.length > 0 ? (
+                                                                sprint.tasks.map((task: any) => (
+                                                                    <div key={task.id} className="text-sm flex items-center gap-3 p-2 bg-white rounded border border-gray-200 shadow-sm hover:border-blue-200 transition-colors">
+                                                                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${task.issue_type === 'bug' ? 'bg-red-500' : 'bg-blue-500'}`} title={task.issue_type}></span>
+                                                                        <span className="font-mono text-xs font-bold text-gray-500 min-w-[70px]">{task.id}</span>
+                                                                        <span className="text-gray-900 truncate flex-1 font-medium">{task.summary}</span>
+                                                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide
+                                                                            ${task.status === 'done' ? 'bg-green-100 text-green-700' :
+                                                                                task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                                            {task.status.replace('_', ' ')}
+                                                                        </span>
+                                                                    </div>
+                                                                ))
+                                                            ) : (
+                                                                <p className="text-sm text-gray-400 italic text-center py-4">No tasks assigned to this sprint</p>
+                                                            )}
                                                         </div>
                                                     </div>
 
