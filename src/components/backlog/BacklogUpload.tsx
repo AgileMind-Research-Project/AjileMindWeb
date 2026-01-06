@@ -72,16 +72,123 @@ export default function BacklogUpload({ projectId, projectName, onSuccess, onCan
 
             {/* File Upload Instructions */}
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-sm font-semibold text-blue-900 mb-2">📝 File Format Requirements</h3>
-                <p className="text-xs text-blue-800 mb-2">Your file should include the following columns:</p>
+                <div className="flex items-start justify-between mb-2">
+                    <div>
+                        <h3 className="text-sm font-semibold text-blue-900 mb-2">📝 File Format Requirements</h3>
+                        <p className="text-xs text-blue-800 mb-2">Your file should include the following columns:</p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            // Generate comprehensive CSV template with example data
+                            const headers = [
+                                'summary',
+                                'description',
+                                'issue_type',
+                                'status',
+                                'priority',
+                                'severity',
+                                'assignee',
+                                'story_points',
+                                'sprint',
+                                'tags'
+                            ];
+
+                            const exampleRows = [
+                                [
+                                    'User Authentication API',
+                                    'Implement JWT-based authentication for user login and registration',
+                                    'Story',
+                                    'To Do',
+                                    'High',
+                                    '',
+                                    'dev@example.com',
+                                    '8',
+                                    'Sprint 1',
+                                    'backend,api,security'
+                                ],
+                                [
+                                    'Add Dashboard Widgets',
+                                    'Create reusable widget components for the main dashboard',
+                                    'Feature',
+                                    'In Progress',
+                                    'Medium',
+                                    '',
+                                    'frontend@example.com',
+                                    '5',
+                                    'Sprint 1',
+                                    'frontend,ui,dashboard'
+                                ],
+                                [
+                                    'Fix Login Page Crash on iOS',
+                                    'Application crashes when attempting to login on iOS Safari',
+                                    'Bug',
+                                    'To Do',
+                                    'High',
+                                    'Critical',
+                                    'qa@example.com',
+                                    '3',
+                                    'Sprint 2',
+                                    'bug,ios,critical'
+                                ],
+                                [
+                                    'Update Database Schema',
+                                    'Add new fields for user preferences table',
+                                    'Change',
+                                    'Done',
+                                    'Low',
+                                    '',
+                                    'dba@example.com',
+                                    '2',
+                                    'Sprint 1',
+                                    'database,schema'
+                                ]
+                            ];
+
+                            // Create CSV content with proper escaping
+                            const csvRows = [headers.join(',')];
+                            exampleRows.forEach(row => {
+                                const escapedRow = row.map(field => {
+                                    if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+                                        return `"${field.replace(/"/g, '""')}"`;
+                                    }
+                                    return field;
+                                });
+                                csvRows.push(escapedRow.join(','));
+                            });
+
+                            const csv = csvRows.join('\n');
+
+                            // Download CSV
+                            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `backlog_template_${projectName.replace(/\s+/g, '_')}.csv`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors duration-200 flex items-center gap-1.5 shadow-sm"
+                        title="Download CSV template with examples"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Download Template
+                    </button>
+                </div>
                 <ul className="text-xs text-blue-700 space-y-1 ml-4">
                     <li><strong>summary</strong> (required) - Item title</li>
                     <li><strong>issue_type</strong> (required) - story, feature, change, or bug</li>
                     <li><strong>description</strong> - Detailed description</li>
+                    <li><strong>status</strong> - To Do, In Progress, Done, etc.</li>
                     <li><strong>priority</strong> - high, medium, or low</li>
-                    <li><strong>assignee</strong> - Email or name</li>
-                    <li><strong>tags</strong> - Comma-separated tags</li>
                     <li><strong>severity</strong> - Required if issue_type is 'bug'</li>
+                    <li><strong>assignee</strong> - Email or name</li>
+                    <li><strong>story_points</strong> - Effort estimation (numeric)</li>
+                    <li><strong>sprint</strong> - Sprint name or number</li>
+                    <li><strong>tags</strong> - Comma-separated tags</li>
                 </ul>
             </div>
 
@@ -159,8 +266,8 @@ export default function BacklogUpload({ projectId, projectName, onSuccess, onCan
                     onClick={handleUpload}
                     disabled={!file || uploading}
                     className={`flex-1 px-6 py-3 rounded-lg font-semibold text-white transition-all duration-200 ${!file || uploading
-                            ? 'bg-gray-300 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg'
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg'
                         }`}
                 >
                     {uploading ? (
