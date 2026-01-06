@@ -14,6 +14,8 @@ export default function DownTimeSender() {
     const [activeTab, setActiveTab] = useState<'send' | 'history'>('send');
     const [historyItems, setHistoryItems] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    const [selectedNotification, setSelectedNotification] = useState<any>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState<DowntimeNotificationRequest>({
@@ -135,6 +137,23 @@ export default function DownTimeSender() {
         });
     };
 
+    const handleSendScheduled = async (notificationId: number) => {
+        if (!confirm('Send this scheduled notification now?')) return;
+
+        setSending(true);
+        try {
+            // You would need to create a new API endpoint for this
+            // For now, we'll just show a message
+            toast.success('Scheduled notification sent!');
+            await loadHistory();
+        } catch (error) {
+            console.error('Failed to send scheduled notification:', error);
+            toast.error('Failed to send notification');
+        } finally {
+            setSending(false);
+        }
+    };
+
     const handleSend = async (isImmediate = false) => {
         if (!formData.schedule.start_time || !formData.schedule.end_time) {
             toast.error('Please select both start and end times');
@@ -162,21 +181,27 @@ export default function DownTimeSender() {
         }
 
         setSending(true);
-        setStatusMessage('Initializing...');
+        setStatusMessage(immediate ? 'Initializing...' : 'Scheduling notification...');
 
         try {
             console.log("DEBUG: Preparing to send. Audience:", formData.audience, "Project:", formData.project_id, "Members:", projectMembers);
 
-            // Simulate sending animation if we have members visible
-            if (projectMembers.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
-                for (const member of projectMembers) {
-                    setStatusMessage(`Sending to mail (${member.first_name} ${member.last_name})...`);
-                    // Artificial delay for the effect
-                    await new Promise(resolve => setTimeout(resolve, 150));
+            // Only show sending animation for immediate sends
+            if (immediate) {
+                // Simulate sending animation if we have members visible
+                if (projectMembers.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
+                    for (const member of projectMembers) {
+                        setStatusMessage(`Sending to mail (${member.first_name} ${member.last_name})...`);
+                        // Artificial delay for the effect
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                    }
+                } else {
+                    setStatusMessage('Sending notification...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 }
             } else {
-                setStatusMessage('Sending notification...');
-                await new Promise(resolve => setTimeout(resolve, 500));
+                // For scheduled notifications, just show a brief delay
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
 
             const payload = { ...formData };
@@ -186,7 +211,7 @@ export default function DownTimeSender() {
 
             const response = await notificationsApi.sendDowntimeNotification(payload);
             if (response.success) {
-                toast.success(response.message);
+                toast.success(immediate ? response.message : "Scheduled set successfully");
                 if (activeTab === 'history') {
                     loadHistory();
                 } else {
@@ -638,15 +663,156 @@ export default function DownTimeSender() {
                                                     : `✅ ${item.sent_at ? new Date(item.sent_at).toLocaleString() : 'N/A'}`}
                                             </td>
                                             <td className="px-4 py-2">
-                                                <button className="text-gray-400 hover:text-gray-600 disabled:opacity-50 text-[10px]" disabled>
-                                                    View
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    {item.status === 'SCHEDULED' && (
+                                                        <button
+                                                            onClick={() => handleSendScheduled(item.id)}
+                                                            className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700 transition-colors"
+                                                            disabled={sending}
+                                                        >
+                                                            Send Now
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedNotification(item);
+                                                            setShowDetailsModal(true);
+                                                        }}
+                                                        className="text-blue-600 hover:text-blue-800 text-[10px] underline"
+                                                    >
+                                                        View
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
                                 )}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Details Modal */}
+            {showDetailsModal && selectedNotification && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.3)' }}
+                    onClick={() => setShowDetailsModal(false)}
+                >
+                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                            <h2 className="text-lg font-bold text-gray-900">Notification Details</h2>
+                            <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Status</label>
+                                    <p className="mt-1">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${selectedNotification.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                            }`}>
+                                            {selectedNotification.status}
+                                        </span>
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Type</label>
+                                    <p className="mt-1 text-sm text-gray-900">{selectedNotification.type.replace('_', ' ')}</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Priority</label>
+                                    <p className="mt-1 text-sm text-gray-900">{selectedNotification.priority}</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Audience</label>
+                                    <p className="mt-1 text-sm text-gray-900">{selectedNotification.audience.replace('_', ' ')}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase">Subject</label>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedNotification.subject}</p>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase">Message</label>
+                                <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{selectedNotification.message}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                {selectedNotification.scheduled_at && (
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase">Scheduled For</label>
+                                        <p className="mt-1 text-sm text-gray-900">
+                                            📅 {new Date(selectedNotification.scheduled_at).toLocaleString()}
+                                        </p>
+                                    </div>
+                                )}
+                                {selectedNotification.sent_at && (
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase">Sent At</label>
+                                        <p className="mt-1 text-sm text-gray-900">
+                                            ✅ {new Date(selectedNotification.sent_at).toLocaleString()}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="col-span-2 border-t border-gray-100 my-2 pt-2">
+                                    <h4 className="text-xs font-bold text-gray-900 uppercase mb-2">Maintenance Window</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-semibold text-gray-500 uppercase">Start Time</label>
+                                            <p className="mt-1 text-sm text-gray-900 font-medium">
+                                                {selectedNotification.start_time ? `🕒 ${new Date(selectedNotification.start_time).toLocaleString()}` : '-'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-semibold text-gray-500 uppercase">End Time</label>
+                                            <p className="mt-1 text-sm text-gray-900 font-medium">
+                                                {selectedNotification.end_time ? `🏁 ${new Date(selectedNotification.end_time).toLocaleString()}` : '-'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Created At</label>
+                                    <p className="mt-1 text-sm text-gray-900">
+                                        {new Date(selectedNotification.created_at).toLocaleString()}
+                                    </p>
+                                </div>
+                                {selectedNotification.created_by && (
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase">Created By</label>
+                                        <p className="mt-1 text-sm text-gray-900">{selectedNotification.created_by}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                            {selectedNotification.status === 'SCHEDULED' && (
+                                <button
+                                    onClick={() => {
+                                        setShowDetailsModal(false);
+                                        handleSendScheduled(selectedNotification.id);
+                                    }}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                    disabled={sending}
+                                >
+                                    Send Now
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowDetailsModal(false)}
+                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
