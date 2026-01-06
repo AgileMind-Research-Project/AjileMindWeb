@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 export default function DownTimeSender() {
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
     const [projects, setProjects] = useState<Project[]>([]);
     const [projectMembers, setProjectMembers] = useState<any[]>([]);
     const [fetchingMembers, setFetchingMembers] = useState(false);
@@ -120,7 +121,23 @@ export default function DownTimeSender() {
         }
 
         setSending(true);
+        setStatusMessage('Initializing...');
+
         try {
+            console.log("DEBUG: Preparing to send. Audience:", formData.audience, "Project:", formData.project_id, "Members:", projectMembers);
+
+            // Simulate sending animation if we have members visible
+            if (projectMembers.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
+                for (const member of projectMembers) {
+                    setStatusMessage(`Sending to mail (${member.first_name} ${member.last_name})...`);
+                    // Artificial delay for the effect
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                }
+            } else {
+                setStatusMessage('Sending notification...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
             const payload = { ...formData };
             if (immediate) {
                 delete payload.scheduled_at; // Ensure we don't send a schedule time for immediate sending
@@ -136,6 +153,7 @@ export default function DownTimeSender() {
             toast.error('Failed to send notification');
         } finally {
             setSending(false);
+            setStatusMessage('');
         }
     };
 
@@ -375,7 +393,7 @@ export default function DownTimeSender() {
                                     disabled={sending}
                                     className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium shadow-sm flex items-center gap-2 disabled:opacity-50"
                                 >
-                                    {sending ? 'Sending...' : 'Send Now 🚀'}
+                                    {sending ? statusMessage || 'Sending...' : 'Send Now 🚀'}
                                 </button>
                             </div>
                         </div>
