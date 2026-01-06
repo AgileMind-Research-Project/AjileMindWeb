@@ -36,15 +36,12 @@ export default function MeetingsPage() {
     }, []);
 
     const handleStartMeeting = (meeting: Meeting) => {
-        // Logic to start meeting (e.g., redirect to video call or active meeting page)
         console.log('Starting meeting:', meeting);
         toast.info(`Starting meeting: ${meeting.title}`);
-        // Example: router.push(`/meetings/${meeting.meeting_id}/live`);
     };
 
     const handleEditMeeting = (meeting: Meeting) => {
         console.log('Edit meeting:', meeting);
-        // TODO: Implement Edit Modal
         toast.info('Edit functionality coming soon');
     };
 
