@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   // Projects (uses existing /api/v1/projects endpoint)
   LIST_PROJECTS: '/projects',
   GET_PROJECT: (projectId: number) => `/projects/${projectId}`,
+  GET_PROJECT_SPRINTS: (projectId: number) => `/projects/${projectId}/sprints`,
 
   // User Project Assignments
   GET_USER_PROJECTS: (userId: string) => `/users/${userId}/projects`,

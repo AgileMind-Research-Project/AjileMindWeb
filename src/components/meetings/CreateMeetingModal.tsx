@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CreateMeetingRequest, meetingsApi, Meeting } from '@/lib/api/meetings.api';
-import { projectsApi, Project } from '@/lib/api/projects.api';
+import { projectsApi, Project, Sprint } from '@/lib/api/projects.api';
+import { backlogApi, BacklogItem } from '@/lib/api/backlog.api';
 import { toast } from 'sonner';
 
 interface CreateMeetingModalProps {
@@ -26,6 +27,8 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
     const [projects, setProjects] = useState<Project[]>([]);
     const [projectUsers, setProjectUsers] = useState<any[]>([]);
     const [fetchingUsers, setFetchingUsers] = useState(false);
+    const [sprints, setSprints] = useState<Sprint[]>([]);
+    const [fetchingSprints, setFetchingSprints] = useState(false);
 
     const [formData, setFormData] = useState<CreateMeetingRequest>(INITIAL_FORM);
 
@@ -51,13 +54,24 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
                     fetchProjectUsers(meeting.project_id);
                 } else {
                     setProjectUsers([]);
+                    setSprints([]);
                 }
             } else {
                 setFormData(INITIAL_FORM);
                 setProjectUsers([]);
+                setSprints([]);
             }
         }
     }, [isOpen, meeting]);
+
+    // Fetch active sprints depending on project and date
+    useEffect(() => {
+        if (formData.project_id && formData.date) {
+            fetchActiveSprints(formData.project_id, formData.date);
+        } else {
+            setSprints([]);
+        }
+    }, [formData.project_id, formData.date]);
 
     const loadProjects = async () => {
         try {
@@ -77,6 +91,21 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
             console.error('Failed to load project users:', error);
         } finally {
             setFetchingUsers(false);
+        }
+    };
+
+    const fetchActiveSprints = async (projectId: number, date: string) => {
+        setFetchingSprints(true);
+        try {
+            const response = await projectsApi.getActiveSprints(projectId, date);
+            if (response.success) {
+                setSprints(response.data.sprints || []);
+            }
+        } catch (error) {
+            console.error('Failed to load active sprints:', error);
+            // toast.error('Failed to load active sprints'); // Optional to avoid spamming on date change
+        } finally {
+            setFetchingSprints(false);
         }
     };
 
@@ -102,8 +131,10 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
             } finally {
                 setFetchingUsers(false);
             }
+            // Sprints will be fetched by useEffect
         } else {
             setProjectUsers([]);
+            setSprints([]);
             setFormData(prev => ({ ...prev, attendees: [] }));
         }
     };
@@ -181,8 +212,79 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
                             </select>
                         </div>
 
+                        {/* Sprints Display */}
+                        {formData.project_id && (
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Current Project Sprints ({sprints.length})
+                                    {fetchingSprints && <span className="ml-2 text-xs text-blue-500">Loading...</span>}
+                                </label>
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-96 overflow-y-auto space-y-4">
+                                    {sprints.length > 0 ? (
+                                        sprints.map(sprint => (
+                                            <div key={sprint.sprint_id} className="bg-white p-3 rounded border border-gray-100 text-sm shadow-sm">
+                                                <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
+                                                    <div>
+                                                        <span className="font-bold text-gray-900 block">{sprint.sprint_name}</span>
+                                                        <span className="text-xs text-gray-500">{sprint.start_date} - {sprint.end_date}</span>
+                                                    </div>
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium 
+                                                        ${sprint.sprint_status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                                            sprint.sprint_status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                                        {sprint.sprint_status}
+                                                    </span>
+                                                </div>
+
+                                                {/* Sprint Tasks */}
+                                                <div className="mt-2">
+                                                    <h5 className="text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                                                        <span>Sprint Tasks ({sprint.tasks?.length || 0})</span>
+                                                    </h5>
+                                                    <div className="bg-gray-50 rounded p-2 space-y-1 max-h-32 overflow-y-auto">
+                                                        {sprint.tasks && sprint.tasks.length > 0 ? (
+                                                            sprint.tasks.map((task: any) => (
+                                                                <div key={task.id} className="text-xs flex items-center gap-2 p-1 hover:bg-white rounded border border-transparent hover:border-gray-100 transition-colors">
+                                                                    <span className={`w-2 h-2 rounded-full ${task.issue_type === 'bug' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
+                                                                    <span className="font-medium text-gray-900 min-w-[60px]">{task.id}</span>
+                                                                    <span className="text-gray-600 truncate flex-1">{task.summary}</span>
+                                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase
+                                                                        ${task.status === 'done' ? 'bg-green-100 text-green-700' :
+                                                                            task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
+                                                                        {task.status.replace('_', ' ')}
+                                                                    </span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <p className="text-xs text-gray-400 italic text-center py-2">No tasks assigned to this sprint</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {sprint.sprint_goal && (
+                                                    <div className="mt-2 text-gray-600 text-xs italic border-l-2 border-blue-200 pl-2">
+                                                        Goal: {sprint.sprint_goal}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-gray-500 italic text-center py-4">
+                                            No active sprints for selected date ({formData.date}).
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Date
+                                {formData.date && (
+                                    <span className="ml-2 text-xs text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded">
+                                        {formData.date}
+                                    </span>
+                                )}
+                            </label>
                             <input
                                 type="date"
                                 required
