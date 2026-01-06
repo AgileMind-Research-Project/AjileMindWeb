@@ -277,7 +277,14 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
                         )}
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Date
+                                {formData.date && (
+                                    <span className="ml-2 text-xs text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded">
+                                        {formData.date}
+                                    </span>
+                                )}
+                            </label>
                             <input
                                 type="date"
                                 required
