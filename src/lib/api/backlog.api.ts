@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from '@/lib/config/api.config';
 export interface BacklogItem {
     id: string; // Jira issue key
     project_id: number;
+    sprint_id?: number;
     summary: string;
     description?: string;
     issue_type: 'story' | 'feature' | 'change' | 'bug';
@@ -37,6 +38,27 @@ export interface BacklogListResponse {
     total: number;
 }
 
+export interface CreateBacklogItemRequest {
+    project_id: number;
+    sprint_id?: number;
+    summary: string;
+    description?: string;
+    issue_type: 'story' | 'feature' | 'change' | 'bug';
+    priority?: 'high' | 'medium' | 'low';
+    assignee?: string;
+    tags?: string[];
+    severity?: string;
+}
+
+export interface CreateBacklogItemResponse {
+    success: boolean;
+    message: string;
+    data: {
+        issue_key: string;
+        jira_url: string;
+    };
+}
+
 export const backlogApi = {
     // Upload Excel/CSV file to create backlog
     uploadFile: async (projectId: number, file: File): Promise<UploadBacklogResponse> => {
@@ -51,8 +73,23 @@ export const backlogApi = {
         });
     },
 
+    // Create a single backlog item
+    createBacklogItem: async (data: CreateBacklogItemRequest): Promise<CreateBacklogItemResponse> => {
+        return httpClient.post('/backlog/', data);
+    },
+
     // List backlog items for a project
     listByProject: async (projectId: number): Promise<BacklogListResponse> => {
         return httpClient.get(`/backlog/project/${projectId}`);
+    },
+
+    // List backlog items for a sprint (GET - legacy)
+    listBySprint: async (sprintId: number): Promise<BacklogListResponse> => {
+        return httpClient.get(`/backlog/sprint/${sprintId}`);
+    },
+
+    // Get sprint tasks (POST with sprint_id in payload)
+    getSprintTasks: async (sprintId: number): Promise<BacklogListResponse> => {
+        return httpClient.post('/backlog/sprint/tasks', { sprint_id: sprintId });
     },
 };
