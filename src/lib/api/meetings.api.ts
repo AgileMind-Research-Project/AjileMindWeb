@@ -14,7 +14,8 @@ export interface Meeting {
     category: string;
     created_at: string;
     created_by: string;
-    // Add other fields as needed
+    meeting_transcript?: string;
+    attendees?: string[];
 }
 
 export interface CreateMeetingRequest {

@@ -103,6 +103,10 @@ export default function MeetingsPage() {
                 isOpen={!!viewMeeting}
                 onClose={() => setViewMeeting(null)}
                 meeting={viewMeeting}
+                onMeetingUpdated={(updated) => {
+                    setViewMeeting(updated);
+                    setMeetings(prev => prev.map(m => m.meeting_id === updated.meeting_id ? updated : m));
+                }}
             />
         </DashboardLayout>
     );
