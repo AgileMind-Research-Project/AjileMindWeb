@@ -37,6 +37,8 @@ export interface UpdateMeetingRequest {
     end_time?: string;
     status?: string;
     category?: string;
+    meeting_transcript?: string;
+    attendees?: string[];
 }
 
 export const meetingsApi = {

@@ -17,6 +17,7 @@ export default function MeetingsPage() {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [viewMeeting, setViewMeeting] = useState<Meeting | null>(null);
+    const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
     const fetchMeetings = async () => {
         setLoading(true);
@@ -25,7 +26,6 @@ export default function MeetingsPage() {
             setMeetings(allMeetings);
         } catch (error) {
             console.error('Failed to load meetings:', error);
-            toast.error('Failed to load meetings');
         } finally {
             setLoading(false);
         }
@@ -35,14 +35,20 @@ export default function MeetingsPage() {
         fetchMeetings();
     }, []);
 
-    const handleStartMeeting = (meeting: Meeting) => {
-        console.log('Starting meeting:', meeting);
-        toast.info(`Starting meeting: ${meeting.title}`);
+    const handleStartMeeting = async (meeting: Meeting) => {
+        try {
+            await meetingsApi.updateMeeting(meeting.meeting_id, { status: 'IN_PROGRESS' });
+            toast.success(`Meeting "${meeting.title}" started`);
+            fetchMeetings();
+        } catch (error) {
+            console.error('Failed to start meeting:', error);
+            toast.error('Failed to start meeting');
+        }
     };
 
     const handleEditMeeting = (meeting: Meeting) => {
-        console.log('Edit meeting:', meeting);
-        toast.info('Edit functionality coming soon');
+        setEditingMeeting(meeting);
+        setIsModalOpen(true);
     };
 
     const handleDeleteMeeting = async (meeting: Meeting) => {
@@ -61,8 +67,8 @@ export default function MeetingsPage() {
     // Filter meetings based on active tab
     const filteredMeetings = meetings.filter(meeting => {
         if (activeTab === 'daily') return meeting.category === 'Daily Meeting';
-        if (activeTab === 'category1') return meeting.category === 'Sprint Planning'; // Mapping for demo
-        if (activeTab === 'category2') return meeting.category === 'Sprint Review' || meeting.category === 'Retrospective'; // Mapping for demo
+        if (activeTab === 'category1') return meeting.category === 'Sprint Planning';
+        if (activeTab === 'category2') return meeting.category === 'Sprint Review' || meeting.category === 'Retrospective';
         return true;
     });
 
@@ -71,7 +77,10 @@ export default function MeetingsPage() {
             <MeetingsHeader
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                onCreateClick={() => setIsModalOpen(true)}
+                onCreateClick={() => {
+                    setEditingMeeting(null);
+                    setIsModalOpen(true);
+                }}
             />
 
             <div className="mt-6">
@@ -93,18 +102,21 @@ export default function MeetingsPage() {
             <CreateMeetingModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                onSuccess={fetchMeetings}
+                onSuccess={() => {
+                    fetchMeetings();
+                    setIsModalOpen(false);
+                }}
+                meeting={editingMeeting}
             />
 
-            <ViewMeetingModal
-                isOpen={!!viewMeeting}
-                onClose={() => setViewMeeting(null)}
-                meeting={viewMeeting}
-                onMeetingUpdated={(updated) => {
-                    setViewMeeting(updated);
-                    setMeetings(prev => prev.map(m => m.meeting_id === updated.meeting_id ? updated : m));
-                }}
-            />
+            {viewMeeting && (
+                <ViewMeetingModal
+                    isOpen={true}
+                    meeting={viewMeeting}
+                    onClose={() => setViewMeeting(null)}
+                    onMeetingUpdated={() => fetchMeetings()}
+                />
+            )}
         </DashboardLayout>
     );
 }

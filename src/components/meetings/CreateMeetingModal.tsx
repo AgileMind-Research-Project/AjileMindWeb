@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreateMeetingRequest, meetingsApi } from '@/lib/api/meetings.api';
+import { CreateMeetingRequest, meetingsApi, Meeting } from '@/lib/api/meetings.api';
 import { projectsApi, Project } from '@/lib/api/projects.api';
 import { toast } from 'sonner';
 
@@ -7,30 +7,57 @@ interface CreateMeetingModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    meeting?: Meeting | null;
 }
 
-export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: CreateMeetingModalProps) {
+const INITIAL_FORM: CreateMeetingRequest = {
+    title: '',
+    description: '',
+    project_id: null,
+    date: new Date().toISOString().split('T')[0],
+    start_time: '09:00',
+    end_time: '10:00',
+    category: 'Daily Meeting',
+    attendees: []
+};
+
+export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting }: CreateMeetingModalProps) {
     const [loading, setLoading] = useState(false);
     const [projects, setProjects] = useState<Project[]>([]);
     const [projectUsers, setProjectUsers] = useState<any[]>([]);
     const [fetchingUsers, setFetchingUsers] = useState(false);
 
-    const [formData, setFormData] = useState<CreateMeetingRequest>({
-        title: '',
-        description: '',
-        project_id: null,
-        date: new Date().toISOString().split('T')[0],
-        start_time: '09:00',
-        end_time: '10:00',
-        category: 'Daily Meeting',
-        attendees: []
-    });
+    const [formData, setFormData] = useState<CreateMeetingRequest>(INITIAL_FORM);
 
     useEffect(() => {
         if (isOpen) {
             loadProjects();
+            if (meeting) {
+                // Formatting time HH:MM:SS -> HH:MM
+                const formatTime = (t: string) => t && t.length > 5 ? t.substring(0, 5) : t;
+
+                setFormData({
+                    title: meeting.title,
+                    description: meeting.description || '',
+                    project_id: meeting.project_id,
+                    date: meeting.date,
+                    start_time: formatTime(meeting.start_time),
+                    end_time: formatTime(meeting.end_time),
+                    category: meeting.category || 'Daily Meeting',
+                    attendees: meeting.attendees || []
+                });
+
+                if (meeting.project_id) {
+                    fetchProjectUsers(meeting.project_id);
+                } else {
+                    setProjectUsers([]);
+                }
+            } else {
+                setFormData(INITIAL_FORM);
+                setProjectUsers([]);
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, meeting]);
 
     const loadProjects = async () => {
         try {
@@ -38,23 +65,37 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
             setProjects(response.data);
         } catch (error) {
             console.error('Failed to load projects:', error);
-            toast.error('Failed to load projects');
+        }
+    };
+
+    const fetchProjectUsers = async (projectId: number) => {
+        setFetchingUsers(true);
+        try {
+            const users = await meetingsApi.getProjectUsers(projectId);
+            setProjectUsers(users);
+        } catch (error) {
+            console.error('Failed to load project users:', error);
+        } finally {
+            setFetchingUsers(false);
         }
     };
 
     const handleProjectChange = async (projectId: string) => {
         const id = projectId ? parseInt(projectId) : null;
         setFormData(prev => ({ ...prev, project_id: id }));
-        setProjectUsers([]);
 
         if (id) {
+            setProjectUsers([]); // Clear while loading
             setFetchingUsers(true);
             try {
                 const users = await meetingsApi.getProjectUsers(id);
                 setProjectUsers(users);
+
+                // Auto-fill attendees when project changes
                 const userEmails = users.map(u => u.email);
                 setFormData(prev => ({ ...prev, attendees: userEmails }));
-                toast.info(`Assigned ${users.length} team members to meeting`);
+                toast.info(`Assigned ${users.length} team members from project`);
+
             } catch (error) {
                 console.error('Failed to load project users:', error);
                 toast.error('Failed to load team members');
@@ -62,6 +103,7 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                 setFetchingUsers(false);
             }
         } else {
+            setProjectUsers([]);
             setFormData(prev => ({ ...prev, attendees: [] }));
         }
     };
@@ -71,21 +113,25 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
         setLoading(true);
 
         try {
-            // Format time to HH:MM:SS if needed, or backend handles HH:MM
-            // Assuming backend handles HH:MM or we append :00
             const payload = {
                 ...formData,
                 start_time: formData.start_time.length === 5 ? `${formData.start_time}:00` : formData.start_time,
                 end_time: formData.end_time.length === 5 ? `${formData.end_time}:00` : formData.end_time,
             };
 
-            await meetingsApi.createMeeting(payload);
-            toast.success('Meeting scheduled successfully');
+            if (meeting) {
+                await meetingsApi.updateMeeting(meeting.meeting_id, payload);
+                toast.success('Meeting updated successfully');
+            } else {
+                await meetingsApi.createMeeting(payload);
+                toast.success('Meeting scheduled successfully');
+            }
+
             onSuccess();
             onClose();
         } catch (error) {
-            console.error('Failed to create meeting:', error);
-            toast.error('Failed to create meeting');
+            console.error('Failed to save meeting:', error);
+            toast.error(meeting ? 'Failed to update meeting' : 'Failed to create meeting');
         } finally {
             setLoading(false);
         }
@@ -95,9 +141,11 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                    <h2 className="text-xl font-semibold text-gray-900">Schedule New Meeting</h2>
+                    <h2 className="text-xl font-semibold text-gray-900">
+                        {meeting ? 'Edit Meeting' : 'Schedule New Meeting'}
+                    </h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -143,7 +191,6 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                             />
                         </div>
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                             <select
@@ -158,7 +205,6 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                                 <option value="Other">Other</option>
                             </select>
                         </div>
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                             <input
@@ -192,10 +238,9 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                             />
                         </div>
 
-                        {/* Auto-assigned Team Display */}
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Assigned Team Members ({projectUsers.length})
+                                Assigned Team Members ({projectUsers.length > 0 ? projectUsers.length : (formData.attendees?.length || 0)})
                                 {fetchingUsers && <span className="ml-2 text-xs text-blue-500">Loading...</span>}
                             </label>
                             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto">
@@ -207,11 +252,20 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                                             </span>
                                         ))}
                                     </div>
+                                ) : formData.attendees && formData.attendees.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {formData.attendees.map((email, i) => (
+                                            <span key={i} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                {email}
+                                            </span>
+                                        ))}
+                                    </div>
                                 ) : (
                                     <p className="text-sm text-gray-500 italic">Select a project to automatically assign team members.</p>
                                 )}
                             </div>
                         </div>
+
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
@@ -233,7 +287,7 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess }: Creat
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                 </svg>
                             )}
-                            Schedule Meeting
+                            {meeting ? 'Update Meeting' : 'Schedule Meeting'}
                         </button>
                     </div>
                 </form>
