@@ -52,5 +52,10 @@ export const notificationsApi = {
     // Send downtime notification
     sendDowntimeNotification: async (data: DowntimeNotificationRequest): Promise<NotificationResponse> => {
         return httpClient.post('/notifications/downtime', data);
+    },
+
+    // List downtime notifications
+    listDowntimeNotifications: async (page = 1, limit = 20): Promise<any> => {
+        return httpClient.get('/notifications/downtime', { params: { page, page_size: limit } });
     }
 };
