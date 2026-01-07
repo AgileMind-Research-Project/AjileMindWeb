@@ -215,33 +215,6 @@ export default function TranscriptUpload() {
 
           {/* Upload Method Toggle */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <div className="flex gap-4 mb-4">
-              <button
-                type="button"
-                onClick={() => setUploadMethod("file")}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium ${
-                  uploadMethod === "file"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                <Upload className="inline w-4 h-4 mr-2" />
-                Upload File
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadMethod("paste")}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium ${
-                  uploadMethod === "paste"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                <FileText className="inline w-4 h-4 mr-2" />
-                Paste Text
-              </button>
-            </div>
-
             {uploadMethod === "file" ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

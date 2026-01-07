@@ -19,6 +19,7 @@ import {
   Shield,
   ChevronRight 
 } from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -106,25 +107,10 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-                <p className="text-sm text-gray-600">Manage your account and preferences</p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <DashboardLayout>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-sm text-gray-600">Manage your account and preferences</p>
       </div>
 
       {/* Content */}
@@ -209,6 +195,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
