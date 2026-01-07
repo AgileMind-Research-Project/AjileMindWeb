@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -9,24 +9,19 @@ interface MenuItem {
   label: string;
   path: string;
   icon: React.ReactNode;
-  roles: string[]; // Allowed roles for this menu item
+  roles: string[];
+}
+
+interface SubMenuItem extends MenuItem {
+  parent?: string;
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const [isDashboardOpen, setIsDashboardOpen] = useState(true);
 
   const menuItems: MenuItem[] = [
-    {
-      label: 'Dashboard',
-      path: '/dashboard',
-      roles: ['USER', 'PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-      )
-    },
     {
       label: 'Projects',
       path: '/dashboard/projects',
@@ -140,18 +135,124 @@ export default function Sidebar() {
     }
   ];
 
+  const dashboardSubMenuItems: SubMenuItem[] = [
+    {
+      label: 'Overview',
+      path: '/dashboard',
+      roles: ['USER', 'PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+      )
+    },
+    {
+      label: 'Risk Management',
+      path: '/dashboard/risk-management',
+      roles: ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      )
+    },
+    {
+      label: 'Delay Management',
+      path: '/dashboard/delay-management',
+      roles: ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    }
+  ];
+
   // Filter menu items based on user role
   const visibleMenuItems = menuItems.filter(item => {
     if (!user) return false;
     return item.roles.includes(user.role);
   });
 
+  // Filter dashboard submenu items based on user role
+  const visibleDashboardSubMenuItems = dashboardSubMenuItems.filter(item => {
+    if (!user) return false;
+    return item.roles.includes(user.role);
+  });
+
   return (
-    <aside className="w-64 bg-gray-50 fixed left-0 top-16 bottom-0 flex flex-col shadow-lg border-r border-gray-200">
-      {/* Navigation Menu */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <aside className="w-64 bg-gray-50 fixed left-0 top-16 bottom-0 flex flex-col shadow-lg border-r border-gray-200">
+        {/* Navigation Menu */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {/* Dashboard Collapsible Section - Always at top */}
+        {visibleDashboardSubMenuItems.length > 0 && (
+          <div>
+            {/* Dashboard Header - Collapsible Trigger */}
+            <button
+              onClick={() => setIsDashboardOpen(!isDashboardOpen)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-md text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+            >
+              <div className="flex items-center space-x-3">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span className="font-semibold">Dashboard</span>
+              </div>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${isDashboardOpen ? 'rotate-180' : ''
+                  }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Dashboard Submenu Items */}
+            {isDashboardOpen && (
+              <div className="mt-1 ml-4 space-y-1 animate-fade-in">
+                {visibleDashboardSubMenuItems.map((subItem) => {
+                  const isActive = pathname === subItem.path;
+
+                  return (
+                    <Link
+                      key={subItem.path}
+                      href={subItem.path}
+                      className={`
+                        flex items-center space-x-3 px-4 py-2.5 rounded-md transition-all duration-200 text-sm
+                        ${isActive
+                          ? `
+                              bg-indigo-100
+                              text-blue-600
+                              shadow-sm
+                              font-semibold
+                              border-l-4
+                              border-blue-600
+                            `
+                          : `
+                              text-gray-600
+                              hover:bg-blue-50
+                              hover:text-blue-600
+                              hover:border-l-4
+                              hover:border-blue-600
+                            `
+                        }
+                      `}
+                    >
+                      {subItem.icon}
+                      <span>{subItem.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Other Menu Items */}
         {visibleMenuItems.map((item) => {
-          const isActive = pathname === item.path;
+            const isActive = pathname === item.path;
 
           return (
             <Link
@@ -161,12 +262,12 @@ export default function Sidebar() {
               flex items-center space-x-3 px-4 py-3 rounded-md transition-all duration-200
               ${isActive
                   ? `
-                    bg-indigo-100 
-                    text-blue-600 
-                    border-l-4 
-                    border-blue-600 
-                    font-semibold
-                  `
+                      bg-indigo-100 
+                      text-blue-600 
+                      border-l-4 
+                      border-blue-600 
+                      font-semibold
+                    `
                   : `
                     text-gray-700 
                     hover:bg-blue-50 
