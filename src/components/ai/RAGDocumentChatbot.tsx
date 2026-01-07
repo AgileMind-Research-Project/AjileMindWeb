@@ -320,7 +320,7 @@ export default function RAGDocumentChatbot() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Choose a date...</option>
-                <option value="all" className="font-semibold text-blue-600">📁 All Dates (Search All Documents)</option>
+                <option value="all" className="font-semibold text-blue-600">All Dates (Search All Documents)</option>
                 {availableDates?.map((dateObj) => (
                   <option key={dateObj.uploaded_date} value={dateObj.uploaded_date}>
                     {new Date(dateObj.uploaded_date).toLocaleDateString()} ({dateObj.count} documents)
@@ -348,7 +348,7 @@ export default function RAGDocumentChatbot() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Choose a document...</option>
-                <option value="all" className="font-semibold text-blue-600">📁 All Documents (Search All)</option>
+                <option value="all" className="font-semibold text-blue-600">All Documents (Search All)</option>
                 {documents?.map((doc) => (
                   <option key={doc.id} value={doc.id}>
                     {doc.doc_title}
@@ -372,7 +372,7 @@ export default function RAGDocumentChatbot() {
             <div className={`flex items-center gap-2 p-3 border rounded-lg ${isSearchAll ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
               <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${isSearchAll ? 'text-green-600' : 'text-blue-600'}`} />
               <span className={`text-sm ${isSearchAll ? 'text-green-900' : 'text-blue-900'}`}>
-                <strong>{isSearchAll ? '🔍 Search Mode:' : 'Current:'}</strong> {selectedDocTitle}
+                <strong>{isSearchAll ? 'Search Mode:' : 'Current:'}</strong> {selectedDocTitle}
                 {isSearchAll && <span className="ml-2 text-xs text-green-700">(Will search all documents and find the relevant one)</span>}
               </span>
             </div>
