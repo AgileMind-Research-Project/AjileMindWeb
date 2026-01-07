@@ -14,6 +14,7 @@ import { authApi } from '@/lib/api/auth.api';
 import { projectsApi } from '@/lib/api/projects.api';
 import { User, Mail, Shield, ArrowLeft, Info, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function InviteUserPage() {
   const router = useRouter();
@@ -118,21 +119,10 @@ export default function InviteUserPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </button>
-            <h1 className="text-2xl font-bold text-blue-600">Invite New User</h1>
-          </div>
-        </div>
-      </nav>
+    <DashboardLayout>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Invite New User</h1>
+      </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
@@ -357,6 +347,6 @@ export default function InviteUserPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

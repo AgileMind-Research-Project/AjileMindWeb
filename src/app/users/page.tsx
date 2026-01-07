@@ -14,6 +14,7 @@ import { authApi } from '@/lib/api/auth.api';
 import * as rolesApi from '@/lib/api/roles.api';
 import { UserPlus, ArrowLeft, Mail, Shield, Trash2, Edit, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function UsersListPage() {
   const router = useRouter();
@@ -139,30 +140,17 @@ export default function UsersListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <h1 className="text-2xl font-bold text-blue-600">User Management</h1>
-            </div>
-            <button
-              onClick={() => router.push('/users/invite')}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <UserPlus className="w-5 h-5" />
-              Invite User
-            </button>
-          </div>
-        </div>
-      </nav>
+    <DashboardLayout>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+        <button
+          onClick={() => router.push('/users/invite')}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <UserPlus className="w-5 h-5" />
+          Invite User
+        </button>
+      </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
@@ -333,6 +321,6 @@ export default function UsersListPage() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }
