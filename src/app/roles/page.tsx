@@ -12,6 +12,7 @@ import { useUser, useHasHydrated, useIsAuthenticated } from '@/lib/store/auth.st
 import { Shield, Plus, Edit2, Trash2, X, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import * as rolesApi from '@/lib/api/roles.api';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Role {
   role_id: string;
@@ -114,10 +115,16 @@ export default function RolesPage() {
   if (!hasHydrated || loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow-sm"><div className="container mx-auto px-6 py-4"><div className="flex items-center justify-between"><div className="flex items-center gap-4"><button onClick={() => router.push('/dashboard')} className="text-gray-600 hover:text-gray-900"><ArrowLeft className="w-6 h-6" /></button><div><h1 className="text-2xl font-bold text-gray-900">Role Management</h1><p className="text-sm text-gray-600">Create and manage custom roles</p></div></div><button onClick={() => { setFormData({ role_name: '', description: '' }); setShowCreateModal(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"><Plus className="w-5 h-5" />Create Role</button></div></div></div>
+    <DashboardLayout>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Role Management</h1>
+          <p className="text-sm text-gray-600">Create and manage custom roles</p>
+        </div>
+        <button onClick={() => { setFormData({ role_name: '', description: '' }); setShowCreateModal(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"><Plus className="w-5 h-5" />Create Role</button>
+      </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
             <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
@@ -261,6 +268,6 @@ export default function RolesPage() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }
