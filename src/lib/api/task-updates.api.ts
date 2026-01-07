@@ -59,6 +59,16 @@ export const taskUpdatesApi = {
         return httpClient.get<TaskUpdate[]>(url);
     },
 
+    // List all updates with filters
+    listUpdates: async (projectId?: number, status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'): Promise<TaskUpdate[]> => {
+        const params = new URLSearchParams();
+        if (projectId) params.append('project_id', projectId.toString());
+        if (status && status !== 'ALL') params.append('status', status);
+
+        const url = `/task-updates/?${params.toString()}`;
+        return httpClient.get<TaskUpdate[]>(url);
+    },
+
     // Approve a task update
     approveUpdate: async (updateId: number, remark?: string): Promise<TaskUpdate> => {
         return httpClient.put<TaskUpdate>(

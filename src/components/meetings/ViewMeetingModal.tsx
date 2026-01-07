@@ -3,6 +3,8 @@ import { Meeting, meetingsApi } from '@/lib/api/meetings.api';
 import { TaskUpdate } from '@/lib/api/task-updates.api';
 import { projectsApi, Sprint } from '@/lib/api/projects.api';
 import { toast } from 'sonner';
+import JiraStatusBadge from './JiraTaskUpdate/JiraStatusBadge';
+import { useJiraApproval } from '@/hooks/useJiraApproval';
 
 interface ViewMeetingModalProps {
     isOpen: boolean;
@@ -37,6 +39,15 @@ export default function ViewMeetingModal({
     const [sprints, setSprints] = useState<Sprint[]>([]);
     const [loadingSprints, setLoadingSprints] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Initialize Jira Approval Hook
+    const { handleApproveWithCheck, isChecking } = useJiraApproval({
+        onApprove: async (task) => {
+            if (onApprove) {
+                await onApprove(task);
+            }
+        }
+    });
 
     // Reset state when meeting changes
     useEffect(() => {
@@ -293,7 +304,13 @@ export default function ViewMeetingModal({
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
-                                            {tasks.map((task) => (
+                                            {/* Sort tasks: IN_PROGRESS -> BLOCKED -> TODO -> DONE */}
+                                            {tasks.slice().sort((a, b) => {
+                                                const priority = { 'IN_PROGRESS': 1, 'BLOCKED': 2, 'TODO': 3, 'DONE': 4 };
+                                                const pA = priority[a.detected_status as keyof typeof priority] || 99;
+                                                const pB = priority[b.detected_status as keyof typeof priority] || 99;
+                                                return pA - pB;
+                                            }).map((task) => (
                                                 <div key={task.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                                                     <div className="flex justify-between items-start">
                                                         <div>
@@ -302,6 +319,7 @@ export default function ViewMeetingModal({
                                                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.detected_status)}`}>
                                                                     {task.detected_status}
                                                                 </span>
+                                                                <JiraStatusBadge ticketId={task.ticket_id} />
                                                             </div>
                                                             <p className="text-gray-600 mt-2 text-sm italic border-l-2 border-gray-300 pl-3">
                                                                 "{task.extracted_context}"
@@ -335,10 +353,11 @@ export default function ViewMeetingModal({
                                                     <div className="flex items-center gap-3 mt-5 pt-4 border-t border-gray-100">
                                                         {onApprove && (
                                                             <button
-                                                                onClick={() => onApprove(task)}
-                                                                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                                                                onClick={() => handleApproveWithCheck(task)}
+                                                                disabled={isChecking}
+                                                                className={`flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 ${isChecking ? 'opacity-70 cursor-wait' : ''}`}
                                                             >
-                                                                ✓ Approve Update
+                                                                {isChecking ? 'Verifying...' : '✓ Approve Update'}
                                                             </button>
                                                         )}
                                                         {onReject && (
@@ -505,8 +524,8 @@ export default function ViewMeetingModal({
                                                                             <div className="flex items-center gap-2">
                                                                                 {/* Issue Type */}
                                                                                 <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${task.issue_type === 'bug'
-                                                                                        ? 'bg-red-50 text-red-700 border-red-100'
-                                                                                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                                                                                    ? 'bg-red-50 text-red-700 border-red-100'
+                                                                                    : 'bg-blue-50 text-blue-700 border-blue-100'
                                                                                     }`}>
                                                                                     {task.issue_type === 'bug' ? '🐞' : '⚡'} {task.issue_type}
                                                                                 </span>
@@ -518,9 +537,9 @@ export default function ViewMeetingModal({
 
                                                                             {/* Status Badge */}
                                                                             <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                                                    task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                                                                        task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                                                            'bg-gray-50 text-gray-600 border-gray-100'
+                                                                                task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                                                    task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                                                        'bg-gray-50 text-gray-600 border-gray-100'
                                                                                 }`}>
                                                                                 {task.status.replace('_', ' ')}
                                                                             </span>
@@ -546,7 +565,7 @@ export default function ViewMeetingModal({
                                                                             {/* Priority Indicator (optional based on user JSON having priority) */}
                                                                             {task.priority && (
                                                                                 <span className={`text-[10px] font-semibold px-1.5 rounded ${task.priority === 'high' ? 'text-orange-700 bg-orange-50' :
-                                                                                        task.priority === 'critical' ? 'text-red-700 bg-red-50' : 'text-gray-500'
+                                                                                    task.priority === 'critical' ? 'text-red-700 bg-red-50' : 'text-gray-500'
                                                                                     }`}>
                                                                                     {task.priority}
                                                                                 </span>
