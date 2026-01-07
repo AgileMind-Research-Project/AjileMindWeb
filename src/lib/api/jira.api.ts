@@ -73,4 +73,14 @@ export const jiraApi = {
   disconnectJira: async (): Promise<any> => {
     return httpClient.delete('/jira/disconnect');
   },
+
+  // Get Jira issue status
+  getIssueStatus: async (issueKey: string): Promise<{ success: boolean; data: any }> => {
+    return httpClient.get(`/jira/issues/${issueKey}/status`);
+  },
+
+  // Transition Jira Issue
+  transitionIssue: async (issueKey: string, targetStatus: string = 'Done'): Promise<{ success: boolean; data: any }> => {
+    return httpClient.post(`/jira/issues/${issueKey}/transition`, { target_status: targetStatus });
+  },
 };

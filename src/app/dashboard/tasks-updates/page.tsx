@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 export default function TaskUpdatesPage() {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-    const [pendingUpdates, setPendingUpdates] = useState<TaskUpdate[]>([]);
+    const [updates, setUpdates] = useState<TaskUpdate[]>([]);
+    const [filterStatus, setFilterStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
     const [extracting, setExtracting] = useState(false);
     const [loading, setLoading] = useState(true);
     const [selectedUpdate, setSelectedUpdate] = useState<TaskUpdate | null>(null);
@@ -18,19 +19,25 @@ export default function TaskUpdatesPage() {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [filterStatus]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [meetingsData, pendingData] = await Promise.all([
+            const [meetingsData, updatesData] = await Promise.all([
                 meetingsApi.listMeetings(),
-                taskUpdatesApi.listPendingApprovals()
+                taskUpdatesApi.listUpdates(undefined, filterStatus)
             ]);
-            // Filter: Show only meetings that are currently IN_PROGRESS
-            const relevantMeetings = meetingsData.filter(m => m.status === 'IN_PROGRESS');
+            // Filter: Show only meetings that are currently IN_PROGRESS, or if we have updates for them
+            // logic: If a meeting has valid updates (based on current filter), show it.
+            // Also show IN_PROGRESS meetings even if they don't have updates yet (so we can extract).
+            const relevantMeetings = meetingsData.filter(m => {
+                const hasMatchingUpdates = updatesData.some(u => u.meeting_id === m.meeting_id);
+                return hasMatchingUpdates || m.status === 'IN_PROGRESS';
+            });
+
             setMeetings(relevantMeetings);
-            setPendingUpdates(pendingData);
+            setUpdates(updatesData);
         } catch (error) {
             console.error('Failed to load data:', error);
             toast.error('Failed to load data');
@@ -61,6 +68,8 @@ export default function TaskUpdatesPage() {
 
     const handleApprove = async (update: TaskUpdate) => {
         try {
+            // Check Jira status via hook is handled in the modal component now
+            // This is a direct calls fallback or used by other components
             await taskUpdatesApi.approveUpdate(update.id);
             toast.success(`Approved ${update.ticket_id}`);
             loadData();
@@ -110,16 +119,34 @@ export default function TaskUpdatesPage() {
         <DashboardLayout>
             <div className="p-8">
                 {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">AI Task Updates</h1>
-                    <p className="text-gray-600 mt-2">Extract and approve task status updates from meeting transcripts using AI. Select a meeting to begin.</p>
+                <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">AI Task Updates</h1>
+                        <p className="text-gray-600 mt-2">Extract and approve task status updates from meeting transcripts using AI.</p>
+                    </div>
+
+                    {/* Status Filters */}
+                    <div className="bg-white p-1 rounded-lg border border-gray-200 shadow-sm flex items-center">
+                        {(['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => setFilterStatus(status)}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterStatus === status
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-50'
+                                    }`}
+                            >
+                                {status.charAt(0) + status.slice(1).toLowerCase()}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Main Content: Full Width Meeting List */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                     <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50 rounded-t-xl">
                         <div className="flex items-center gap-3">
-                            <h2 className="text-lg font-bold text-gray-900">Started Meetings</h2>
+                            <h2 className="text-lg font-bold text-gray-900">Meetings</h2>
                             <span className="text-sm bg-blue-100 text-blue-800 px-3 py-0.5 rounded-full font-medium">{meetings.length}</span>
                         </div>
                     </div>
@@ -130,12 +157,16 @@ export default function TaskUpdatesPage() {
                                 <div className="w-16 h-16 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <span className="text-3xl">📅</span>
                                 </div>
-                                <h3 className="text-lg font-medium text-gray-900">No started meetings found</h3>
-                                <p className="text-gray-500 mt-2">Start a meeting from the Calendar to see it here.</p>
+                                <h3 className="text-lg font-medium text-gray-900">No meetings found</h3>
+                                <p className="text-gray-500 mt-2">
+                                    {filterStatus === 'PENDING'
+                                        ? "No in-progress meetings found."
+                                        : `No meetings found with ${filterStatus.toLowerCase()} updates.`}
+                                </p>
                             </div>
                         ) : (
                             meetings.map((meeting) => {
-                                const meetingUpdates = pendingUpdates.filter(u => u.meeting_id === meeting.meeting_id);
+                                const meetingUpdates = updates.filter(u => u.meeting_id === meeting.meeting_id);
                                 return (
                                     <div
                                         key={meeting.meeting_id}
@@ -247,7 +278,7 @@ export default function TaskUpdatesPage() {
                     }}
                     // Extraction Features
                     extractionMode={true}
-                    tasks={viewingMeeting ? pendingUpdates.filter(u => u.meeting_id === viewingMeeting.meeting_id) : []}
+                    tasks={viewingMeeting ? updates.filter(u => u.meeting_id === viewingMeeting.meeting_id) : []}
                     onExtract={() => viewingMeeting && handleExtract(viewingMeeting)}
                     onApprove={handleApprove}
                     onReject={handleReject}
