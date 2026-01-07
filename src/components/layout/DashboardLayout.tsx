@@ -7,9 +7,10 @@ import { useUser, useTenant } from '@/lib/store/auth.store';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+  mainClassName?: string;
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, mainClassName }: DashboardLayoutProps) {
   const { logout } = useAuth();
   const user = useUser();
   const tenant = useTenant();
@@ -18,7 +19,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="min-h-screen bg-gray-100">
       {/* Top Navigation Bar - Fixed */}
       <nav className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-200 z-50">
-        <div className="px-6 py-4">
+        <div className="px-4 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-8">
               <h1 className="text-2xl font-bold text-blue-600">AgileMind</h1>
@@ -52,9 +53,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar - Below Navbar */}
       <div className="flex pt-16">
         <Sidebar />
-        
+
         {/* Main Content */}
-        <main className="flex-1 ml-64 p-8">
+        <main className={`flex-1 ml-64 ${mainClassName || 'p-8'}`}>
           {children}
         </main>
       </div>

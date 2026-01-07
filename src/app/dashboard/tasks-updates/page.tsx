@@ -27,11 +27,8 @@ export default function TaskUpdatesPage() {
                 meetingsApi.listMeetings(),
                 taskUpdatesApi.listPendingApprovals()
             ]);
-            // Filter: Show meetings that are started (IN_PROGRESS) or have a transcript
-            // User requested "started: meeting list". Including IN_PROGRESS and COMPLETED.
-            const relevantMeetings = meetingsData.filter(m =>
-                m.status === 'IN_PROGRESS' || m.status === 'COMPLETED' || m.meeting_transcript
-            );
+            // Filter: Show only meetings that are currently IN_PROGRESS
+            const relevantMeetings = meetingsData.filter(m => m.status === 'IN_PROGRESS');
             setMeetings(relevantMeetings);
             setPendingUpdates(pendingData);
         } catch (error) {
