@@ -50,11 +50,11 @@ export interface ReleaseNote {
     content: ReleaseNoteContent;
     summary: string | null;
     status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-    created_by: number;
+    created_by: string;
     created_at: string;
     updated_at: string;
     published_at: string | null;
-    published_by: number | null;
+    published_by: string | null;
 }
 
 export const releaseNotesApi = {
