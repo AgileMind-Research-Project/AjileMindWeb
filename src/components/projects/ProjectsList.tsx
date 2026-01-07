@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { json } from 'node:stream/consumers';
 import BacklogUpload from '@/components/backlog/BacklogUpload';
-import PrioritizedBacklogModal from '@/components/projects/PrioritizedBacklogModal';
+import PrioritizedBacklogModal from './PrioritizedBacklogModal';
+import SubtaskModal from './SubtaskModal';
 
 interface Project {
   project_id: number;
@@ -31,6 +30,7 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
   const [limit] = useState(20);
   const [showBacklogModal, setShowBacklogModal] = useState(false);
   const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [showSubtaskModal, setShowSubtaskModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const fetchProjects = async () => {
@@ -286,19 +286,35 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                         </svg>
                       </button>
 
-                      {/* View Prioritized Backlog Button */}
+                      {/* Backlog Priority Manager Button */}
                       <button
                         onClick={() => {
                           setSelectedProject(project);
                           setShowPriorityModal(true);
                         }}
                         className="text-purple-600 hover:text-purple-900 transition-colors"
-                        title="View Prioritized Backlog"
+                        title="Backlog Priority Manager"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                         </svg>
                       </button>
+
+                      {/* View Subtask Hierarchy Button */}
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowSubtaskModal(true);
+                        }}
+                        className="text-orange-600 hover:text-orange-900 transition-colors"
+                        title="View Subtask Hierarchy"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                      </button>
+
+
                     </div>
                   </td>
                 </tr>
@@ -404,6 +420,21 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
           isOpen={showPriorityModal}
           onClose={() => {
             setShowPriorityModal(false);
+            setSelectedProject(null);
+          }}
+        />
+      )}
+
+
+      {/* Subtask Modal */}
+      {showSubtaskModal && selectedProject && (
+        <SubtaskModal
+          projectId={selectedProject.project_id}
+          projectName={selectedProject.project_name}
+          projectKey={selectedProject.key}
+          isOpen={showSubtaskModal}
+          onClose={() => {
+            setShowSubtaskModal(false);
             setSelectedProject(null);
           }}
         />

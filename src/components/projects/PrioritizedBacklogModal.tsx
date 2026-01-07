@@ -354,8 +354,8 @@ export default function PrioritizedBacklogModal({
                             <button
                                 onClick={() => setActiveTab('prioritized')}
                                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'prioritized'
-                                        ? 'border-blue-600 text-blue-600'
-                                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
                                     }`}
                             >
                                 Prioritized ({prioritizedItems.length})
@@ -363,8 +363,8 @@ export default function PrioritizedBacklogModal({
                             <button
                                 onClick={() => setActiveTab('available')}
                                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'available'
-                                        ? 'border-blue-600 text-blue-600'
-                                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
                                     }`}
                             >
                                 Available ({availableItems.length})
