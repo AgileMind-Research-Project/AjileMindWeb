@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { json } from 'node:stream/consumers';
 import BacklogUpload from '@/components/backlog/BacklogUpload';
+import PrioritizedBacklogModal from './PrioritizedBacklogModal';
+import SubtaskModal from './SubtaskModal';
 
 interface Project {
   project_id: number;
@@ -29,6 +29,8 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
   const [showBacklogModal, setShowBacklogModal] = useState(false);
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [showSubtaskModal, setShowSubtaskModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const fetchProjects = async () => {
@@ -100,25 +102,66 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
             {total} project{total !== 1 ? 's' : ''} total
           </p> */}
         </div>
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex items-center gap-3">
+          {/* Download Backlog Template Button */}
+          <button
+            onClick={() => {
+              // Generate CSV template with all required columns
+              const headers = ['summary', 'description', 'issue_type', 'status', 'priority', 'severity', 'assignee', 'story_points', 'sprint', 'tags'];
+              const exampleRow = ['Example Task', 'Task description here', 'Story', 'To Do', 'High', '', 'user@example.com', '5', 'Sprint 1', 'backend,api'];
+              const csv = [headers.join(','), exampleRow.join(',')].join('\n');
+
+              // Download CSV
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'backlog_template.csv';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            }}
+            className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-md hover:from-green-700 hover:to-green-800 flex items-center space-x-2 shadow-md transition-all duration-200"
+            title="Download CSV template for bulk backlog creation"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          <span>Create Project</span>
-        </button>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span>Download Backlog Template</span>
+          </button>
+
+          {/* Create Project Button */}
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2 shadow-md transition-all duration-200"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Create Project</span>
+          </button>
+        </div>
       </div>
 
       {/* Projects Table */}
@@ -242,6 +285,36 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       </button>
+
+                      {/* Backlog Priority Manager Button */}
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowPriorityModal(true);
+                        }}
+                        className="text-purple-600 hover:text-purple-900 transition-colors"
+                        title="Backlog Priority Manager"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                      </button>
+
+                      {/* View Subtask Hierarchy Button */}
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowSubtaskModal(true);
+                        }}
+                        className="text-orange-600 hover:text-orange-900 transition-colors"
+                        title="View Subtask Hierarchy"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                      </button>
+
+
                     </div>
                   </td>
                 </tr>
@@ -310,7 +383,7 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
       {showBacklogModal && selectedProject && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+            className="fixed inset-0 bg-black/60 transition-opacity"
             onClick={() => {
               setShowBacklogModal(false);
               setSelectedProject(null);
@@ -337,6 +410,34 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Prioritized Backlog Modal */}
+      {showPriorityModal && selectedProject && (
+        <PrioritizedBacklogModal
+          projectId={selectedProject.project_id}
+          projectName={selectedProject.project_name}
+          isOpen={showPriorityModal}
+          onClose={() => {
+            setShowPriorityModal(false);
+            setSelectedProject(null);
+          }}
+        />
+      )}
+
+
+      {/* Subtask Modal */}
+      {showSubtaskModal && selectedProject && (
+        <SubtaskModal
+          projectId={selectedProject.project_id}
+          projectName={selectedProject.project_name}
+          projectKey={selectedProject.key}
+          isOpen={showSubtaskModal}
+          onClose={() => {
+            setShowSubtaskModal(false);
+            setSelectedProject(null);
+          }}
+        />
       )}
     </div>
   );
