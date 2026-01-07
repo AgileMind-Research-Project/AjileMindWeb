@@ -500,15 +500,58 @@ export default function ViewMeetingModal({
                                                         <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
                                                             {sprint.tasks && sprint.tasks.length > 0 ? (
                                                                 sprint.tasks.map((task: any) => (
-                                                                    <div key={task.id} className="text-sm flex items-center gap-3 p-2 bg-white rounded border border-gray-200 shadow-sm hover:border-blue-200 transition-colors">
-                                                                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${task.issue_type === 'bug' ? 'bg-red-500' : 'bg-blue-500'}`} title={task.issue_type}></span>
-                                                                        <span className="font-mono text-xs font-bold text-gray-500 min-w-[70px]">{task.id}</span>
-                                                                        <span className="text-gray-900 truncate flex-1 font-medium">{task.summary}</span>
-                                                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide
-                                                                            ${task.status === 'done' ? 'bg-green-100 text-green-700' :
-                                                                                task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                                            {task.status.replace('_', ' ')}
-                                                                        </span>
+                                                                    <div key={task.id} className="flex flex-col gap-2 p-3 bg-white rounded-lg border border-gray-200 shadow-sm hover:border-blue-300 transition-all group">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <div className="flex items-center gap-2">
+                                                                                {/* Issue Type */}
+                                                                                <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${task.issue_type === 'bug'
+                                                                                        ? 'bg-red-50 text-red-700 border-red-100'
+                                                                                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                                                                                    }`}>
+                                                                                    {task.issue_type === 'bug' ? '🐞' : '⚡'} {task.issue_type}
+                                                                                </span>
+                                                                                {/* Ticket ID */}
+                                                                                <span className="font-mono text-xs font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                                                                    {task.id}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            {/* Status Badge */}
+                                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
+                                                                                    task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                                                        task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                                                            'bg-gray-50 text-gray-600 border-gray-100'
+                                                                                }`}>
+                                                                                {task.status.replace('_', ' ')}
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {/* Summary */}
+                                                                        <div className="text-sm font-medium text-gray-900 leading-snug pl-1">
+                                                                            {task.summary}
+                                                                        </div>
+
+                                                                        {/* Footer: Assignee */}
+                                                                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-gray-50">
+                                                                            <div className="flex items-center gap-2 text-xs text-gray-500" title={`Assigned to: ${task.assignee}`}>
+                                                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ring-1 ring-white ${task.assignee ? 'bg-indigo-500' : 'bg-gray-300'
+                                                                                    }`}>
+                                                                                    {task.assignee ? task.assignee.charAt(0).toUpperCase() : '?'}
+                                                                                </div>
+                                                                                <span className="truncate max-w-[180px] font-medium text-gray-600">
+                                                                                    {task.assignee || 'Unassigned'}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            {/* Priority Indicator (optional based on user JSON having priority) */}
+                                                                            {task.priority && (
+                                                                                <span className={`text-[10px] font-semibold px-1.5 rounded ${task.priority === 'high' ? 'text-orange-700 bg-orange-50' :
+                                                                                        task.priority === 'critical' ? 'text-red-700 bg-red-50' : 'text-gray-500'
+                                                                                    }`}>
+                                                                                    {task.priority}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 ))
                                                             ) : (
