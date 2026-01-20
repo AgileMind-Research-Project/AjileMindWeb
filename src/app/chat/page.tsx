@@ -463,24 +463,36 @@ function ChatContent() {
 
         setStartingMeeting(true);
         try {
-            // Generate a unique meeting ID
-            const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // Import meeting API
+            const { meetingAPI } = await import('@/lib/api/meetingAPI');
 
-            // In a real implementation, you would:
-            // 1. Create the meeting in the backend
-            // 2. Get a proper meeting ID
-            // 3. Redirect to the meeting room
+            // Create meeting via API
+            const response = await meetingAPI.createMeeting(
+                activeChannelId!,
+                `${activeChannel.name} Meeting`,
+                `Instant meeting in ${activeChannel.name}`
+            );
 
-            // For now, we'll redirect to a meeting page with channel context
-            const meetingUrl = `/meetings/${meetingId}?channel=${activeChannelId}&title=${encodeURIComponent(activeChannel.name)}`;
+            if (response.success && response.data) {
+                const meetingId = response.data.id;
 
-            // Open in new tab (Teams-like behavior)
-            window.open(meetingUrl, '_blank');
+                // Start the meeting immediately
+                await meetingAPI.startMeeting(meetingId);
 
-            setShowMeetingModal(false);
+                // Redirect to meeting page
+                const meetingUrl = `/meetings/${meetingId}?channel=${activeChannelId}&title=${encodeURIComponent(activeChannel.name)}`;
+
+                // Open in new tab (Teams-like behavior)
+                window.open(meetingUrl, '_blank');
+
+                setShowMeetingModal(false);
+
+                // Send notification message to channel
+                await handleSendMessage(`📹 Meeting started! Join here: /meetings/${meetingId}`);
+            }
         } catch (error) {
             console.error('Failed to start meeting:', error);
-            alert('Failed to start meeting');
+            alert('Failed to start meeting: ' + (error instanceof Error ? error.message : 'Unknown error'));
         } finally {
             setStartingMeeting(false);
         }

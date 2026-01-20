@@ -12,12 +12,38 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useMeetingStore } from '@/lib/store/meetingStore';
+import { meetingAPI } from '@/lib/api/meetingAPI';
+import socketClient from '@/lib/websocket/socketClient';
+import * as webrtc from '@/lib/webrtc/peerConnection';
+import { useWebRTC } from '@/lib/webrtc/useWebRTC';
+import type { Socket } from 'socket.io-client';
+
+interface Participant {
+    user_id: string;
+    username: string;
+    joined_at: string;
+}
+
+interface JoinRequest {
+    id: string;
+    user_id: string;
+    username: string;
+    message?: string;
+    status: string;
+    created_at: string;
+}
+
+interface PeerData {
+    peerConnection: RTCPeerConnection;
+    stream: MediaStream | null;
+}
 
 export default function MeetingRoomPage() {
     const params = useParams();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const meetingId = params.id as string;
     const channelId = searchParams.get('channel');
     const channelTitle = searchParams.get('title');
@@ -25,7 +51,26 @@ export default function MeetingRoomPage() {
     const [isInitializing, setIsInitializing] = useState(true);
     const [showChat, setShowChat] = useState(false);
     const [showParticipants, setShowParticipants] = useState(false);
+    const [meetingData, setMeetingData] = useState<any>(null);
+    const [apiParticipants, setApiParticipants] = useState<Participant[]>([]);
+    const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+    const [isHost, setIsHost] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState<string>('');
+    const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+    const [chatMessages, setChatMessages] = useState<Array<{ id: string, sender: string, message: string, timestamp: string }>>([]);
+    const [chatInput, setChatInput] = useState('');
+
+    // WebRTC State
+    const [peerConnections, setPeerConnections] = useState<Map<string, PeerData>>(new Map());
+    const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+    const [participantStatus, setParticipantStatus] = useState<Map<string, { mic: boolean, camera: boolean }>>(new Map());
+    const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set()); // Track who is speaking
+
     const videoRef = useRef<HTMLVideoElement>(null);
+    const socketRef = useRef<Socket | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioAnalyzersRef = useRef<Map<string, AnalyserNode>>(new Map());
+    const localAnalyzerRef = useRef<AnalyserNode | null>(null);
 
     const {
         localStream,
@@ -42,24 +87,324 @@ export default function MeetingRoomPage() {
         leaveMeeting,
     } = useMeetingStore();
 
+    // Initialize WebRTC for peer-to-peer video/audio
+    const { sendChatMessage, broadcastMicStatus, broadcastCameraStatus } = useWebRTC({
+        meetingId,
+        userId: currentUserId,
+        username: currentUserEmail || currentUserId, // User email for chat display
+        localStream,
+        peerConnections,
+        setPeerConnections,
+        setRemoteStreams,
+        setParticipantStatus,
+        setChatMessages,
+        socketRef,
+        onUserJoined: (data: { user_id: string; username: string; session_id: string }) => {
+            // Immediately add to participants list when user joins via WebSocket
+            console.log(`✅ Adding user to participants: ${data.username}`);
+            setApiParticipants(prev => {
+                // Check if already exists
+                const exists = prev.some(p => p.user_id === data.user_id);
+                if (exists) {
+                    console.log(`⚠️ User ${data.username} already in participants`);
+                    return prev;
+                }
+                // Add new participant
+                return [...prev, {
+                    user_id: data.user_id,
+                    username: data.username,
+                    joined_at: new Date().toISOString(),
+                }];
+            });
+        },
+        onUserLeft: (data: { user_id: string; username: string }) => {
+            // Remove from participants list when user leaves via WebSocket
+            console.log(`❌ Removing user from participants: ${data.username}`);
+            setApiParticipants(prev => prev.filter(p => p.user_id !== data.user_id));
+        },
+    });
+
     // Initialize meeting on mount
     useEffect(() => {
+        // Get current user ID FIRST before anything else
+        try {
+            const token = localStorage.getItem('access_token') || localStorage.getItem('auth-storage');
+            if (token) {
+                let actualToken = token;
+
+                // Parse auth-storage if needed
+                if (token.startsWith('{')) {
+                    const parsed = JSON.parse(token);
+                    actualToken = parsed.state?.accessToken || token;
+                }
+
+                const payload = JSON.parse(atob(actualToken.split('.')[1]));
+                const userId = payload.user_id || payload.sub || '';
+                const userEmail = payload.email || payload.username || userId;
+                setCurrentUserId(userId);
+                setCurrentUserEmail(userEmail);
+                console.log('👤 Current user:', userId, userEmail);
+            }
+        } catch (error) {
+            console.error('Failed to decode token:', error);
+        }
+
         initializeMeeting();
+        loadMeetingData();
+
+        // Poll for participant updates every 3 seconds
+        const participantInterval = setInterval(() => {
+            loadMeetingData();
+        }, 3000);
+
+        // Poll for join requests if host
+        const requestInterval = setInterval(() => {
+            if (isHost) {
+                loadJoinRequests();
+            }
+        }, 5000);
 
         return () => {
+            clearInterval(participantInterval);
+            clearInterval(requestInterval);
             // Cleanup on unmount
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
         };
-    }, []);
+    }, [isHost]);
+
+    // Callback ref to set video srcObject when element mounts
+    const setVideoRef = (element: HTMLVideoElement | null) => {
+        // Store the ref
+        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = element;
+
+        // Set srcObject when element is available and we have a stream
+        if (element && localStream) {
+            element.srcObject = localStream;
+            console.log('✅ Video srcObject set successfully via callback ref');
+        }
+    };
 
     // Update video element when local stream changes
     useEffect(() => {
+        console.log('📹 Video state changed:');
+        console.log('  localStream:', localStream ? 'Available' : 'None');
+        console.log('  isVideoEnabled:', isVideoEnabled);
+        console.log('  videoRef.current:', videoRef.current ? 'Present' : 'Missing');
+
         if (videoRef.current && localStream) {
             videoRef.current.srcObject = localStream;
+            console.log('✅ Video srcObject set successfully');
         }
-    }, [localStream]);
+    }, [localStream, isVideoEnabled]);
+
+    // Audio detection for local stream (detect when YOU are speaking)
+    useEffect(() => {
+        if (!localStream || !isAudioEnabled) {
+            // Remove self from speaking users if mic is off
+            setSpeakingUsers(prev => {
+                const next = new Set(prev);
+                next.delete(currentUserId);
+                return next;
+            });
+            return;
+        }
+
+        try {
+            // Create audio context if not exists
+            if (!audioContextRef.current) {
+                audioContextRef.current = new AudioContext();
+            }
+
+            const audioContext = audioContextRef.current;
+            const source = audioContext.createMediaStreamSource(localStream);
+            const analyzer = audioContext.createAnalyser();
+            analyzer.fftSize = 512;
+            analyzer.smoothingTimeConstant = 0.8;
+
+            source.connect(analyzer);
+            localAnalyzerRef.current = analyzer;
+
+            const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+            let speakingTimeout: NodeJS.Timeout;
+
+            const checkAudioLevel = () => {
+                analyzer.getByteFrequencyData(dataArray);
+
+                // Calculate average volume
+                const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+
+                // Threshold for speaking (adjust as needed)
+                const SPEAKING_THRESHOLD = 20;
+
+                if (average > SPEAKING_THRESHOLD) {
+                    // User is speaking
+                    setSpeakingUsers(prev => {
+                        const next = new Set(prev);
+                        next.add(currentUserId);
+                        return next;
+                    });
+
+                    // Clear existing timeout
+                    clearTimeout(speakingTimeout);
+
+                    // Set timeout to remove speaking indicator after silence
+                    speakingTimeout = setTimeout(() => {
+                        setSpeakingUsers(prev => {
+                            const next = new Set(prev);
+                            next.delete(currentUserId);
+                            return next;
+                        });
+                    }, 500);
+                }
+
+                requestAnimationFrame(checkAudioLevel);
+            };
+
+            checkAudioLevel();
+
+            return () => {
+                clearTimeout(speakingTimeout);
+                source.disconnect();
+            };
+        } catch (error) {
+            console.error('Error setting up audio detection:', error);
+        }
+    }, [localStream, isAudioEnabled, currentUserId]);
+
+    // Audio detection for remote streams
+    useEffect(() => {
+        const analyzers = audioAnalyzersRef.current;
+
+        remoteStreams.forEach((stream, userId) => {
+            if (analyzers.has(userId)) return; // Already monitoring
+
+            try {
+                if (!audioContextRef.current) {
+                    audioContextRef.current = new AudioContext();
+                }
+
+                const audioContext = audioContextRef.current;
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyzer = audioContext.createAnalyser();
+                analyzer.fftSize = 512;
+                analyzer.smoothingTimeConstant = 0.8;
+
+                source.connect(analyzer);
+                analyzers.set(userId, analyzer);
+
+                const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+                let speakingTimeout: NodeJS.Timeout;
+
+                const checkAudioLevel = () => {
+                    analyzer.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                    const SPEAKING_THRESHOLD = 20;
+
+                    if (average > SPEAKING_THRESHOLD) {
+                        setSpeakingUsers(prev => {
+                            const next = new Set(prev);
+                            next.add(userId);
+                            return next;
+                        });
+
+                        clearTimeout(speakingTimeout);
+                        speakingTimeout = setTimeout(() => {
+                            setSpeakingUsers(prev => {
+                                const next = new Set(prev);
+                                next.delete(userId);
+                                return next;
+                            });
+                        }, 500);
+                    }
+
+                    requestAnimationFrame(checkAudioLevel);
+                };
+
+                checkAudioLevel();
+            } catch (error) {
+                console.error('Error setting up remote audio detection:', error);
+            }
+        });
+
+        // Cleanup removed streams
+        analyzers.forEach((analyzer, userId) => {
+            if (!remoteStreams.has(userId)) {
+                analyzers.delete(userId);
+                setSpeakingUsers(prev => {
+                    const next = new Set(prev);
+                    next.delete(userId);
+                    return next;
+                });
+            }
+        });
+    }, [remoteStreams]);
+
+
+    const loadMeetingData = async () => {
+        try {
+            const response = await meetingAPI.getMeeting(meetingId);
+            console.log('📊 Meeting data loaded:', response);
+
+            if (response.success && response.data) {
+                setMeetingData(response.data);
+
+                // Check if current user is host
+                const token = localStorage.getItem('access_token');
+                if (token) {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const userId = payload.user_id || payload.sub;
+                    setIsHost(response.data.created_by_user_id === userId);
+                }
+
+                // Load participants
+                const partResponse = await meetingAPI.getParticipants(meetingId);
+                console.log('👥 Participants response:', partResponse);
+
+                if (partResponse.success && partResponse.data) {
+                    console.log('✅ Participant count:', partResponse.data.participants.length);
+                    setApiParticipants(partResponse.data.participants);
+                } else {
+                    console.warn('⚠️ No participants data in response');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Failed to load meeting data:', error);
+        }
+    };
+
+    const loadJoinRequests = async () => {
+        try {
+            const response = await meetingAPI.getJoinRequests(meetingId);
+            if (response.success && response.data) {
+                setJoinRequests(response.data.requests);
+            }
+        } catch (error) {
+            // Silently fail - user might not be host
+        }
+    };
+
+    const handleApproveRequest = async (requestId: string) => {
+        try {
+            await meetingAPI.processJoinRequest(meetingId, requestId, 'approve');
+            await loadJoinRequests();
+            await loadMeetingData(); // Refresh participants
+        } catch (error) {
+            console.error('Failed to approve request:', error);
+            alert('Failed to approve join request');
+        }
+    };
+
+    const handleRejectRequest = async (requestId: string) => {
+        try {
+            await meetingAPI.processJoinRequest(meetingId, requestId, 'reject');
+            await loadJoinRequests();
+        } catch (error) {
+            console.error('Failed to reject request:', error);
+            alert('Failed to reject join request');
+        }
+    };
 
     const initializeMeeting = async () => {
         setIsInitializing(true);
@@ -80,11 +425,8 @@ export default function MeetingRoomPage() {
             setLocalStream(stream);
             setInMeeting(true);
 
-            // In a real implementation, you would:
-            // 1. Connect to WebRTC signaling server
-            // 2. Join the meeting room
-            // 3. Set up peer connections
-            // 4. Handle incoming streams from other participants
+            // Auto-join as participant
+            await autoJoinMeeting();
 
         } catch (error) {
             console.error('Failed to access media devices:', error);
@@ -94,23 +436,121 @@ export default function MeetingRoomPage() {
         }
     };
 
-    const handleLeaveMeeting = () => {
+    const autoJoinMeeting = async () => {
+        try {
+            // Get token (same logic as meetingAPI.ts getToken function)
+            let token: string | null = null;
+
+            // Try Zustand auth storage first
+            const authStorage = localStorage.getItem('auth-storage');
+            if (authStorage) {
+                try {
+                    const parsed = JSON.parse(authStorage);
+                    if (parsed.state?.accessToken) {
+                        token = parsed.state.accessToken;
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse auth-storage:', e);
+                }
+            }
+
+            // Fallback to direct access_token
+            if (!token) {
+                token = localStorage.getItem('access_token');
+            }
+
+            if (!token) {
+                console.error('❌ No access token found in auth-storage or access_token!');
+                return;
+            }
+
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const userId = payload.user_id || payload.sub;
+            const username = payload.email || payload.username || 'User';
+
+            console.log('🔑 Token found and decoded');
+            console.log('👤 Extracted userId:', userId);
+            console.log('📧 Extracted username:', username);
+            console.log('🚀 Auto-joining meeting as:', username, 'with ID:', userId);
+
+            // Add self as participant
+            const response = await meetingAPI.addParticipant(meetingId, userId, username);
+            console.log('📥 Add participant response:', response);
+
+            console.log('✅ Successfully joined as participant');
+
+            // Reload participant list
+            await loadMeetingData();
+        } catch (error) {
+            console.error('⚠️ Auto-join failed:', error);
+            console.error('⚠️ Error details:', error instanceof Error ? error.message : String(error));
+            // Don't alert - user might already be a participant
+        }
+    };
+
+    const handleLeaveMeeting = async () => {
         if (confirm('Are you sure you want to leave this meeting?')) {
+            // If host, ask about ending meeting
+            if (isHost) {
+                const endMeeting = confirm('As the host, do you want to END the meeting for everyone? (Cancel to just leave)');
+                if (endMeeting) {
+                    await handleEndMeeting();
+                    return;
+                }
+            }
+
             leaveMeeting();
-            window.close(); // Close the meeting tab
+            router.push('/chat');
+        }
+    };
+
+    const handleEndMeeting = async () => {
+        try {
+            // Store transcript
+            const transcript = `Meeting "${meetingData?.title}" ended at ${new Date().toISOString()}\nParticipants: ${apiParticipants.length}`;
+            await meetingAPI.storeTranscript(meetingId, transcript, 'text', {
+                participants: apiParticipants.length,
+                duration: 'N/A',
+                ended_by: currentUserId
+            });
+
+            // End meeting
+            await meetingAPI.endMeeting(meetingId);
+
+            leaveMeeting();
+            router.push('/chat');
+        } catch (error) {
+            console.error('Failed to end meeting:', error);
+            alert('Failed to end meeting');
         }
     };
 
     const handleToggleAudio = () => {
         toggleAudio();
+        broadcastMicStatus(!isAudioEnabled);
     };
 
     const handleToggleVideo = () => {
         toggleVideo();
+        broadcastCameraStatus(!isVideoEnabled);
     };
 
     const handleToggleScreenShare = async () => {
         await toggleScreenShare();
+    };
+
+    const handleSendMessage = () => {
+        if (chatInput.trim()) {
+            sendChatMessage(chatInput.trim());
+            setChatInput('');
+        }
+    };
+
+    const handleChatKeyPress = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
     };
 
     if (isInitializing) {
@@ -147,7 +587,7 @@ export default function MeetingRoomPage() {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
-                        {participants.length + 1}
+                        {apiParticipants.length}
                     </button>
 
                     {/* Chat Toggle */}
@@ -166,56 +606,152 @@ export default function MeetingRoomPage() {
             {/* Main Content Area */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Video Grid */}
-                <div className="flex-1 p-4 flex items-center justify-center">
-                    <div className="relative w-full h-full max-w-6xl">
-                        {/* Local Video */}
-                        <div className="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden">
-                            {localStream && isVideoEnabled ? (
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="w-full h-full object-cover mirror"
-                                    style={{ transform: 'scaleX(-1)' }}
-                                />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
-                                    <div className="text-center">
-                                        <div className="w-32 h-32 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4">
-                                            <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
+                <div className="flex-1 p-4 flex items-center justify-center bg-gray-900">
+                    <div className="relative w-full h-full max-w-7xl">
+                        {/* Participants Grid - Teams Style */}
+                        <div className={`grid gap-4 h-full ${apiParticipants.length === 1 ? 'grid-cols-1' :
+                            apiParticipants.length <= 4 ? 'grid-cols-2' :
+                                'grid-cols-3'
+                            }`}>
+                            {/* Local User Video */}
+                            <div className={`relative bg-gray-800 rounded-lg overflow-hidden transition-all duration-200 ${speakingUsers.has(currentUserId)
+                                ? 'ring-4 ring-green-500 animate-pulse'
+                                : ''
+                                }`}>
+                                {localStream && isVideoEnabled ? (
+                                    <video
+                                        ref={setVideoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-full h-full object-cover mirror"
+                                        style={{ transform: 'scaleX(-1)' }}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
+                                        <div className="text-center">
+                                            <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-lg font-semibold text-white">You</p>
                                         </div>
-                                        <p className="text-2xl font-semibold text-white">You</p>
-                                        {!isVideoEnabled && (
-                                            <p className="text-sm text-white/80 mt-2">Camera is off</p>
-                                        )}
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {/* Audio Indicator */}
-                            {!isAudioEnabled && (
-                                <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                                    </svg>
-                                    Muted
-                                </div>
-                            )}
+                                {/* Speaking Indicator Badge */}
+                                {speakingUsers.has(currentUserId) && (
+                                    <div className="absolute top-3 left-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z" />
+                                        </svg>
+                                        Speaking
+                                    </div>
+                                )}
 
-                            {/* Name Tag */}
-                            <div className="absolute bottom-4 left-4 bg-black/50 text-white px-3 py-1 rounded text-sm">
-                                You
+                                {/* Audio Indicator */}
+                                {!isAudioEnabled && (
+                                    <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                        </svg>
+                                    </div>
+                                )}
+
+                                {/* Name Tag */}
+                                <div className="absolute bottom-3 left-3 bg-black/70 text-white px-3 py-1 rounded text-sm font-medium">
+                                    You
+                                </div>
                             </div>
+
+                            {/* Other Participants - Show all from API */}
+                            {apiParticipants
+                                .filter(participant => participant.user_id !== currentUserId)
+                                .map((participant) => {
+                                    const stream = remoteStreams.get(participant.user_id);
+                                    const status = participantStatus.get(participant.user_id) || { mic: true, camera: true };
+
+                                    return (
+                                        <div
+                                            key={participant.user_id}
+                                            className={`relative bg-gray-800 rounded-lg overflow-hidden transition-all duration-200 ${speakingUsers.has(participant.user_id)
+                                                    ? 'ring-4 ring-green-500 animate-pulse'
+                                                    : ''
+                                                }`}
+                                        >
+                                            {status.camera && stream ? (
+                                                <video
+                                                    ref={(video) => {
+                                                        if (video && stream) {
+                                                            video.srcObject = stream;
+                                                        }
+                                                    }}
+                                                    autoPlay
+                                                    playsInline
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600">
+                                                    <div className="text-center">
+                                                        <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                                                            <span className="text-4xl font-bold text-white">
+                                                                {participant.username.charAt(0).toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-lg font-semibold text-white truncate px-4">
+                                                            {participant.username.split('@')[0]}
+                                                        </p>
+                                                        {!stream && (
+                                                            <p className="text-xs text-white/60 mt-1">Connecting...</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Speaking Indicator Badge */}
+                                            {speakingUsers.has(participant.user_id) && (
+                                                <div className="absolute top-3 left-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
+                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z" />
+                                                    </svg>
+                                                    Speaking
+                                                </div>
+                                            )}
+
+                                            {/* Mic Indicator */}
+                                            {!status.mic && (
+                                                <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                    </svg>
+                                                </div>
+                                            )}
+
+                                            {/* Name Tag */}
+                                            <div className="absolute bottom-3 left-3 bg-black/70 text-white px-3 py-1 rounded text-sm font-medium truncate max-w-[calc(100%-24px)]">
+                                                {participant.username.split('@')[0]}
+                                            </div>
+
+                                            {/* Host Badge */}
+                                            {participant.user_id === meetingData?.created_by_user_id && (
+                                                <div className="absolute top-3 left-3 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-bold">
+                                                    HOST
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                         </div>
 
-                        {/* Other Participants (Placeholder) */}
-                        {participants.length === 0 && (
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                                <p className="text-gray-400 text-lg">Waiting for others to join...</p>
+                        {/* Waiting Message - Only when alone */}
+                        {apiParticipants.length <= 1 && (
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                                <div className="bg-black/50 backdrop-blur-sm rounded-lg px-6 py-4">
+                                    <p className="text-gray-300 text-lg">Waiting for others to join...</p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -237,15 +773,142 @@ export default function MeetingRoomPage() {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 p-4 overflow-y-auto">
-                            <p className="text-gray-500 text-sm text-center">No messages yet</p>
+
+                        {/* Messages */}
+                        <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                            {chatMessages.length === 0 ? (
+                                <p className="text-gray-500 text-sm text-center mt-8">No messages yet. Start the conversation!</p>
+                            ) : (
+                                chatMessages.map((msg) => {
+                                    const isOwnMessage = msg.sender === currentUserEmail || msg.sender === currentUserId;
+                                    return (
+                                        <div
+                                            key={msg.id}
+                                            className={`rounded-lg p-3 ${isOwnMessage
+                                                ? 'bg-blue-600/20 border border-blue-500/30'
+                                                : 'bg-gray-700'
+                                                }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-sm font-semibold ${isOwnMessage ? 'text-blue-300' : 'text-blue-400'
+                                                    }`}>
+                                                    {isOwnMessage ? 'You' : msg.sender}
+                                                </span>
+                                                <span className="text-xs text-gray-400">{msg.timestamp}</span>
+                                            </div>
+                                            <p className="text-sm text-white">{msg.message}</p>
+                                        </div>
+                                    );
+                                })
+                            )}
                         </div>
+
+                        {/* Input */}
                         <div className="p-4 border-t border-gray-700">
-                            <input
-                                type="text"
-                                placeholder="Type a message..."
-                                className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyPress={handleChatKeyPress}
+                                    placeholder="Type a message..."
+                                    className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                    onClick={handleSendMessage}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Participants Sidebar */}
+                {showParticipants && (
+                    <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+                        <div className="p-4 border-b border-gray-700">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-semibold text-white">
+                                    Participants ({apiParticipants.length})
+                                </h3>
+                                <button
+                                    onClick={() => setShowParticipants(false)}
+                                    className="text-gray-400 hover:text-white"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {/* Participants List */}
+                            <div className="space-y-2">
+                                {apiParticipants.map((participant) => (
+                                    <div
+                                        key={participant.user_id}
+                                        className="flex items-center gap-3 p-2 bg-gray-700 rounded-lg"
+                                    >
+                                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm">
+                                            {participant.username.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium text-white">{participant.username}</div>
+                                            {participant.user_id === meetingData?.created_by_user_id && (
+                                                <div className="text-xs text-gray-400">Host</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Join Requests (Host Only) */}
+                            {isHost && joinRequests.length > 0 && (
+                                <div className="mt-6">
+                                    <h4 className="font-semibold mb-3 text-yellow-400 flex items-center gap-2">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                        Join Requests ({joinRequests.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {joinRequests.map((request) => (
+                                            <div
+                                                key={request.id}
+                                                className="p-3 bg-gray-700 rounded-lg border-2 border-yellow-600"
+                                            >
+                                                <div className="text-sm font-medium text-white mb-1">
+                                                    {request.username}
+                                                </div>
+                                                {request.message && (
+                                                    <div className="text-xs text-gray-400 mb-2">
+                                                        "{request.message}"
+                                                    </div>
+                                                )}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleApproveRequest(request.id)}
+                                                        className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium"
+                                                    >
+                                                        ✓ Approve
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRejectRequest(request.id)}
+                                                        className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium"
+                                                    >
+                                                        ✗ Reject
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
