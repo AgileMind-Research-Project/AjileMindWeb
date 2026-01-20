@@ -228,6 +228,7 @@ export default function MeetingRoomPage() {
 
             const dataArray = new Uint8Array(analyzer.frequencyBinCount);
             let speakingTimeout: NodeJS.Timeout;
+            let lastSpeakingState = false;  // Track last state to avoid duplicate socket emits
 
             const checkAudioLevel = () => {
                 analyzer.getByteFrequencyData(dataArray);
@@ -246,6 +247,12 @@ export default function MeetingRoomPage() {
                         return next;
                     });
 
+                    // Emit speaking status to other users (only if not already speaking)
+                    if (!lastSpeakingState) {
+                        lastSpeakingState = true;
+                        socketClient.sendSpeakingStatus(true);
+                    }
+
                     // Clear existing timeout
                     clearTimeout(speakingTimeout);
 
@@ -256,6 +263,12 @@ export default function MeetingRoomPage() {
                             next.delete(currentUserId);
                             return next;
                         });
+                        
+                        // Emit stopped speaking
+                        if (lastSpeakingState) {
+                            lastSpeakingState = false;
+                            socketClient.sendSpeakingStatus(false);
+                        }
                     }, 500);
                 }
 
@@ -267,6 +280,10 @@ export default function MeetingRoomPage() {
             return () => {
                 clearTimeout(speakingTimeout);
                 source.disconnect();
+                // Emit stopped speaking on cleanup
+                if (lastSpeakingState) {
+                    socketClient.sendSpeakingStatus(false);
+                }
             };
         } catch (error) {
             console.error('Error setting up audio detection:', error);
@@ -340,6 +357,32 @@ export default function MeetingRoomPage() {
             }
         });
     }, [remoteStreams]);
+
+    // Listen for speaking events from other users via socket (backup for when WebRTC audio doesn't work)
+    useEffect(() => {
+        const socket = socketClient.getSocket();
+        if (!socket) return;
+
+        const handleUserSpeaking = (data: { user_id: string; username: string; speaking: boolean }) => {
+            console.log(`🗣️ User speaking event: ${data.username} (${data.user_id}) speaking=${data.speaking}`);
+            
+            setSpeakingUsers(prev => {
+                const next = new Set(prev);
+                if (data.speaking) {
+                    next.add(data.user_id);
+                } else {
+                    next.delete(data.user_id);
+                }
+                return next;
+            });
+        };
+
+        socket.on('user-speaking', handleUserSpeaking);
+
+        return () => {
+            socket.off('user-speaking', handleUserSpeaking);
+        };
+    }, []);
 
 
     const loadMeetingData = async () => {
@@ -428,9 +471,40 @@ export default function MeetingRoomPage() {
             // Auto-join as participant
             await autoJoinMeeting();
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to access media devices:', error);
-            alert('Failed to access camera/microphone. Please check permissions.');
+            
+            // Try audio-only if video fails (common when camera is used by another app)
+            try {
+                console.log('📹 Video failed, trying audio-only...');
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                });
+                
+                setLocalStream(audioStream);
+                setInMeeting(true);
+                alert('Camera unavailable (may be used by another browser). Joining with audio only.');
+                await autoJoinMeeting();
+                
+            } catch (audioError) {
+                console.error('Audio-only also failed:', audioError);
+                
+                // Provide specific error messages
+                if (error.name === 'NotAllowedError') {
+                    alert('Camera/Microphone permission denied. Please allow access in your browser settings.');
+                } else if (error.name === 'NotFoundError') {
+                    alert('No camera or microphone found on this device.');
+                } else if (error.name === 'NotReadableError' || error.name === 'AbortError') {
+                    alert('Camera/Microphone is being used by another application. Please close other video apps or browsers using the camera.');
+                } else {
+                    alert('Failed to access camera/microphone. Please check permissions and try again.');
+                }
+            }
         } finally {
             setIsInitializing(false);
         }
@@ -672,6 +746,23 @@ export default function MeetingRoomPage() {
                                 .map((participant) => {
                                     const stream = remoteStreams.get(participant.user_id);
                                     const status = participantStatus.get(participant.user_id) || { mic: true, camera: true };
+                                    
+                                    // Check video track state more thoroughly
+                                    const videoTrack = stream?.getVideoTracks()[0];
+                                    const trackInfo = videoTrack ? 
+                                        `enabled=${videoTrack.enabled}, readyState=${videoTrack.readyState}, muted=${videoTrack.muted}` : 
+                                        'no track';
+                                    
+                                    // Show video ONLY if:
+                                    // 1. Camera status is on (from WebSocket)
+                                    // 2. Stream exists with a valid video track
+                                    // 3. Track is NOT muted (muted = no actual data flowing)
+                                    const hasValidVideoTrack = videoTrack && 
+                                        videoTrack.readyState === 'live' && 
+                                        !videoTrack.muted;  // KEY: Check muted state!
+                                    const shouldShowVideo = status.camera && stream && hasValidVideoTrack;
+                                    
+                                    console.log(`🎥 Participant ${participant.username}: camera=${status.camera}, hasStream=${!!stream}, trackInfo=${trackInfo}, shouldShowVideo=${shouldShowVideo}`);
 
                                     return (
                                         <div
@@ -681,16 +772,65 @@ export default function MeetingRoomPage() {
                                                     : ''
                                                 }`}
                                         >
-                                            {status.camera && stream ? (
+                                            {/* AUDIO ELEMENT - Always render to play remote audio even when video is hidden */}
+                                            {stream && (
+                                                <audio
+                                                    key={`audio-${participant.user_id}`}
+                                                    ref={(audio) => {
+                                                        if (audio && stream) {
+                                                            if (audio.srcObject !== stream) {
+                                                                console.log(`🔊 Setting audio srcObject for ${participant.username}`);
+                                                                audio.srcObject = stream;
+                                                            }
+                                                            if (audio.paused) {
+                                                                audio.play().catch(err => {
+                                                                    console.warn(`⚠️ Audio autoplay blocked for ${participant.username}:`, err);
+                                                                });
+                                                            }
+                                                        }
+                                                    }}
+                                                    autoPlay
+                                                    style={{ display: 'none' }}  // Hidden audio element
+                                                />
+                                            )}
+                                            
+                                            {shouldShowVideo ? (
                                                 <video
+                                                    key={`video-${participant.user_id}-${videoTrack?.id || 'no-track'}`}
                                                     ref={(video) => {
                                                         if (video && stream) {
-                                                            video.srcObject = stream;
+                                                            // Only set srcObject if it changed to avoid re-triggering
+                                                            if (video.srcObject !== stream) {
+                                                                console.log(`🎬 Setting video srcObject for ${participant.username}`);
+                                                                video.srcObject = stream;
+                                                            }
+                                                            // Ensure video plays (browsers may block autoplay)
+                                                            if (video.paused) {
+                                                                video.play().catch(err => {
+                                                                    console.warn(`⚠️ Video autoplay blocked for ${participant.username}:`, err);
+                                                                });
+                                                            }
                                                         }
                                                     }}
                                                     autoPlay
                                                     playsInline
+                                                    muted={true}  // Mute video element - audio is played by separate <audio> element above
                                                     className="w-full h-full object-cover"
+                                                    onLoadedMetadata={(e) => {
+                                                        const video = e.target as HTMLVideoElement;
+                                                        console.log(`✅ Video metadata loaded for ${participant.username}: ${video.videoWidth}x${video.videoHeight}`);
+                                                        video.play().catch(() => {});
+                                                    }}
+                                                    onCanPlay={(e) => {
+                                                        console.log(`▶️ Video can play for ${participant.username}`);
+                                                    }}
+                                                    onPlaying={(e) => {
+                                                        const video = e.target as HTMLVideoElement;
+                                                        console.log(`🎬 Video playing for ${participant.username}: ${video.videoWidth}x${video.videoHeight}`);
+                                                    }}
+                                                    onError={(e) => {
+                                                        console.error(`❌ Video error for ${participant.username}:`, e);
+                                                    }}
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600">
@@ -703,9 +843,14 @@ export default function MeetingRoomPage() {
                                                         <p className="text-lg font-semibold text-white truncate px-4">
                                                             {participant.username.split('@')[0]}
                                                         </p>
-                                                        {!stream && (
-                                                            <p className="text-xs text-white/60 mt-1">Connecting...</p>
-                                                        )}
+                                                        {/* Show appropriate status message */}
+                                                        {!stream ? (
+                                                            <p className="text-xs text-white/60 mt-1">Waiting for connection...</p>
+                                                        ) : videoTrack?.muted ? (
+                                                            <p className="text-xs text-yellow-200 mt-1">📶 Connecting video...</p>
+                                                        ) : !status.camera ? (
+                                                            <p className="text-xs text-white/60 mt-1">Camera off</p>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             )}

@@ -47,26 +47,56 @@ export function useWebRTC(params: UseWebRTCParams) {
 
     useEffect(() => {
         if (!userId || !localStream) {
-            console.log('⏳ Waiting for:', { userId: !!userId, localStream: !!localStream });
+            console.log('⏳ WebRTC waiting for:', { 
+                hasUserId: !!userId, 
+                userId: userId || 'none',
+                hasLocalStream: !!localStream 
+            });
             return;
         }
 
         console.log('🚀 Initializing WebRTC with media stream...');
+        console.log('🔑 User ID:', userId);
+        console.log('👤 Username:', username);
+        console.log('🏠 Meeting ID:', meetingId);
 
         // Connect to Socket.IO
         const socket = socketClient.connect(meetingId, userId, username);
         socketRef.current = socket;
 
         // Create peer connection for a user
-        const createPeer = (sessionId: string, userId: string, username: string) => {
+        const createPeer = (sessionId: string, oderId: string, username: string) => {
             console.log(`🔗 Creating peer connection for ${username} (${sessionId})`);
 
             const pc = webrtc.createPeerConnection({
                 onTrack: (stream) => {
                     console.log(`📥 Received stream from ${username}`);
+                    
+                    // Listen for track unmute to update UI when video starts flowing
+                    stream.getVideoTracks().forEach(track => {
+                        track.onunmute = () => {
+                            console.log(`🔊 Video track unmuted for ${username} - video should now display`);
+                            // Force re-render by updating the stream reference
+                            setRemoteStreams(prev => {
+                                const next = new Map(prev);
+                                next.set(oderId, stream);
+                                return next;
+                            });
+                        };
+                        track.onmute = () => {
+                            console.log(`🔇 Video track muted for ${username} - video will show avatar`);
+                            // Force re-render
+                            setRemoteStreams(prev => {
+                                const next = new Map(prev);
+                                next.set(oderId, stream);
+                                return next;
+                            });
+                        };
+                    });
+                    
                     setRemoteStreams(prev => {
                         const next = new Map(prev);
-                        next.set(userId, stream);
+                        next.set(oderId, stream);
                         return next;
                     });
 
@@ -93,7 +123,7 @@ export function useWebRTC(params: UseWebRTCParams) {
                         });
                         setRemoteStreams(prev => {
                             const next = new Map(prev);
-                            next.delete(userId);
+                            next.delete(oderId);
                             return next;
                         });
                     }
@@ -122,6 +152,17 @@ export function useWebRTC(params: UseWebRTCParams) {
             // Create peer connections to all existing users and send offers
             for (const participant of data.participants) {
                 console.log(`🔗 Connecting to existing user: ${participant.username}`);
+                console.log(`📊 Their media status - mic: ${participant.mic_enabled}, camera: ${participant.camera_enabled}`);
+
+                // Set initial media status BEFORE peer connection
+                setParticipantStatus(prev => {
+                    const next = new Map(prev);
+                    next.set(participant.user_id, {
+                        mic: participant.mic_enabled ?? true,
+                        camera: participant.camera_enabled ?? true
+                    });
+                    return next;
+                });
 
                 // Notify parent component
                 onUserJoined?.(participant);
@@ -136,6 +177,17 @@ export function useWebRTC(params: UseWebRTCParams) {
         // Handle user joined
         socket.on('user-joined', async (data) => {
             console.log(`👤 User joined: ${data.username} (${data.session_id})`);
+            console.log(`📊 New user media status - mic: ${data.mic_enabled}, camera: ${data.camera_enabled}`);
+
+            // Set initial media status for new user
+            setParticipantStatus(prev => {
+                const next = new Map(prev);
+                next.set(data.user_id, {
+                    mic: data.mic_enabled ?? true,
+                    camera: data.camera_enabled ?? true
+                });
+                return next;
+            });
 
             // Notify parent component immediately
             onUserJoined?.(data);
@@ -214,6 +266,7 @@ export function useWebRTC(params: UseWebRTCParams) {
 
         // Handle status updates
         socket.on('mic-toggle', (data) => {
+            console.log(`🎤 Received mic-toggle: user=${data.user_id}, enabled=${data.enabled}`);
             setParticipantStatus(prev => {
                 const next = new Map(prev);
                 const current = next.get(data.user_id) || { mic: true, camera: true };
@@ -223,12 +276,21 @@ export function useWebRTC(params: UseWebRTCParams) {
         });
 
         socket.on('camera-toggle', (data) => {
+            console.log(`📹 Received camera-toggle: user=${data.user_id}, enabled=${data.enabled}`);
             setParticipantStatus(prev => {
                 const next = new Map(prev);
                 const current = next.get(data.user_id) || { mic: true, camera: true };
                 next.set(data.user_id, { ...current, camera: data.enabled });
+                console.log(`📹 Updated participant status for ${data.user_id}: camera=${data.enabled}`);
                 return next;
             });
+        });
+
+        // Handle speaking status from other participants (socket-based speaking indicator)
+        socket.on('user-speaking', (data) => {
+            console.log(`🗣️ Received user-speaking: user=${data.user_id} (${data.username}), speaking=${data.speaking}`);
+            // This event is handled in the meeting page component via socket listener
+            // The setSpeakingUsers is managed there
         });
 
         // Cleanup on unmount

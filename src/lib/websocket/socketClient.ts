@@ -34,6 +34,7 @@ export interface SocketEvents {
     'mic-toggle': (data: { user_id: string; enabled: boolean }) => void;
     'camera-toggle': (data: { user_id: string; enabled: boolean }) => void;
     'screen-share-toggle': (data: { user_id: string; enabled: boolean }) => void;
+    'user-speaking': (data: { user_id: string; username: string; speaking: boolean }) => void;
 
     // Meeting Data & Transcripts
     'meeting-info': (data: any) => void;
@@ -67,6 +68,7 @@ class SocketClient {
         // Connection events
         this.socket.on('connect', () => {
             console.log('✅ Socket connected:', this.socket?.id);
+            console.log('🔌 Socket transport:', this.socket?.io.engine.transport.name);
 
             // Join meeting room
             this.socket?.emit('join_meeting', {
@@ -75,7 +77,7 @@ class SocketClient {
                 username: username,
             });
 
-            console.log(`📍 Joined meeting room: ${meetingId}`);
+            console.log(`📍 Joining meeting room: ${meetingId} as ${username} (${userId})`);
         });
 
         this.socket.on('disconnect', (reason) => {
@@ -83,7 +85,12 @@ class SocketClient {
         });
 
         this.socket.on('connect_error', (error) => {
-            console.error('❌ Socket connection error:', error);
+            console.error('❌ Socket connection error:', error.message);
+        });
+        
+        // Debug: Log ALL incoming events
+        this.socket.onAny((eventName, ...args) => {
+            console.log(`📨 Socket event received: ${eventName}`, args);
         });
 
         return this.socket;
@@ -134,6 +141,15 @@ class SocketClient {
     sendScreenShareToggle(enabled: boolean) {
         this.socket?.emit('screen_share_toggle', { enabled });
         console.log('🖥️ Screen share toggle:', enabled);
+    }
+
+    // Speaking status - broadcast when user is speaking
+    sendSpeakingStatus(speaking: boolean) {
+        this.socket?.emit('speaking', { speaking });
+        // Only log when starting to speak (reduces console noise)
+        if (speaking) {
+            console.log('🗣️ Speaking status:', speaking);
+        }
     }
 
     // Meeting Data & Transcripts

@@ -5,13 +5,46 @@
  * for peer-to-peer video/audio streaming
  */
 
-// STUN servers for N AT traversal
+// ICE servers for NAT traversal
+// STUN helps discover public IP, TURN relays traffic when direct connection fails
 const ICE_SERVERS: RTCConfiguration = {
     iceServers: [
+        // Google STUN servers
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        // Additional public STUN servers
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+        // Free public TURN servers (for testing - use your own for production)
+        // Metered TURN servers
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+        },
+        // Twilio's free TURN for testing (may have limits)
+        {
+            urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+            username: '08d5c0e0c5e4e5e0f5c5e0d5c0e5f5e5',
+            credential: 'test',
+        },
     ],
+    // Enable ICE trickling for faster connection
+    iceCandidatePoolSize: 10,
+    // Allow both direct (peer-to-peer) and relayed (TURN) connections
+    iceTransportPolicy: 'all',
 };
 
 export interface PeerConnectionCallbacks {
@@ -31,9 +64,27 @@ export function createPeerConnection(
 
     // Handle incoming media tracks
     pc.ontrack = (event) => {
-        console.log('📥 Received remote track:', event.track.kind);
+        console.log('📥 Received remote track:', event.track.kind, 'enabled:', event.track.enabled);
+        console.log('📥 Track readyState:', event.track.readyState);
         const stream = event.streams[0];
         if (stream) {
+            console.log('📥 Stream has', stream.getVideoTracks().length, 'video tracks,', stream.getAudioTracks().length, 'audio tracks');
+            
+            // Log when video track becomes active/inactive
+            stream.getVideoTracks().forEach(track => {
+                track.onended = () => console.log('🔴 Video track ended');
+                track.onmute = () => console.log('🔇 Video track muted');
+                track.onunmute = () => console.log('🔊 Video track unmuted');
+            });
+            
+            // Log when audio track becomes active/inactive
+            stream.getAudioTracks().forEach(track => {
+                console.log(`🎤 Audio track: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+                track.onended = () => console.log('🔴 Audio track ended');
+                track.onmute = () => console.log('🔇 Audio track muted');
+                track.onunmute = () => console.log('🔊 Audio track unmuted');
+            });
+            
             callbacks.onTrack(stream);
         }
     };
