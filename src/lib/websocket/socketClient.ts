@@ -69,7 +69,7 @@ class SocketClient {
             console.log('✅ Socket connected:', this.socket?.id);
 
             // Join meeting room
-            this.socket?.emit('join-meeting', {
+            this.socket?.emit('join_meeting', {
                 meeting_id: meetingId,
                 user_id: userId,
                 username: username,
@@ -110,40 +110,40 @@ class SocketClient {
     }
 
     sendIceCandidate(to: string, candidate: RTCIceCandidateInit) {
-        this.socket?.emit('ice-candidate', { to, candidate });
+        this.socket?.emit('ice_candidate', { to, candidate });
         console.log('🧊 Sent ICE candidate to:', to);
     }
 
     // Chat
     sendChatMessage(message: string, timestamp: string) {
-        this.socket?.emit('chat-message', { message, timestamp });
+        this.socket?.emit('chat_message', { message, timestamp });
         console.log('💬 Sent chat message:', message.substring(0, 50));
     }
 
     // Status Updates
     sendMicToggle(enabled: boolean) {
-        this.socket?.emit('mic-toggle', { enabled });
+        this.socket?.emit('mic_toggle', { enabled });
         console.log('🎤 Mic toggle:', enabled);
     }
 
     sendCameraToggle(enabled: boolean) {
-        this.socket?.emit('camera-toggle', { enabled });
+        this.socket?.emit('camera_toggle', { enabled });
         console.log('📹 Camera toggle:', enabled);
     }
 
     sendScreenShareToggle(enabled: boolean) {
-        this.socket?.emit('screen-share-toggle', { enabled });
+        this.socket?.emit('screen_share_toggle', { enabled });
         console.log('🖥️ Screen share toggle:', enabled);
     }
 
     // Meeting Data & Transcripts
     getMeetingInfo(meetingId: string) {
-        this.socket?.emit('get-meeting-info', { meeting_id: meetingId });
+        this.socket?.emit('get_meeting_info', { meeting_id: meetingId });
         console.log('📊 Requested meeting info for:', meetingId);
     }
 
     saveTranscript(meetingId?: string) {
-        this.socket?.emit('save-transcript', { meeting_id: meetingId });
+        this.socket?.emit('save_transcript', { meeting_id: meetingId });
         console.log('📝 Requested transcript save for:', meetingId || 'current meeting');
     }
 

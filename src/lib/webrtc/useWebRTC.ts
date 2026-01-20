@@ -46,9 +46,12 @@ export function useWebRTC(params: UseWebRTCParams) {
     } = params;
 
     useEffect(() => {
-        if (!userId || !localStream) return;
+        if (!userId || !localStream) {
+            console.log('⏳ Waiting for:', { userId: !!userId, localStream: !!localStream });
+            return;
+        }
 
-        console.log('🚀 Initializing WebRTC...');
+        console.log('🚀 Initializing WebRTC with media stream...');
 
         // Connect to Socket.IO
         const socket = socketClient.connect(meetingId, userId, username);
@@ -240,7 +243,7 @@ export function useWebRTC(params: UseWebRTCParams) {
             // Disconnect socket
             socketClient.disconnect();
         };
-    }, [meetingId, userId, username, localStream]);
+    }, [meetingId, userId, username, localStream]); // Need localStream to trigger when media is ready
 
     return {
         sendChatMessage: (message: string) => {
