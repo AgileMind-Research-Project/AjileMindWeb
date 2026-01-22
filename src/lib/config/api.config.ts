@@ -4,8 +4,21 @@
  * Centralized API configuration for all HTTP requests
  */
 
+// Dynamic API URL based on where the app is accessed from
+// This allows localhost to work on server and IP to work on clients
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: use current hostname with port 8000
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:8000`;
+  }
+  // Server-side: use environment variable or fallback
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+};
+
 export const API_CONFIG = {
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000',
+  baseURL: getApiBaseUrl(),
   version: process.env.NEXT_PUBLIC_API_VERSION || 'v1',
   timeout: 180000, // 3 minutes - increased for large file uploads (backlog)
 };
