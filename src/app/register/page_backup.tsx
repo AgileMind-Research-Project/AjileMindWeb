@@ -51,7 +51,7 @@ export default function RegisterPage() {
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const [termsScrolledToBottom, setTermsScrolledToBottom] = useState(false);
     const [privacyScrolledToBottom, setPrivacyScrolledToBottom] = useState(false);
-    
+
     // OTP-related states
     const [otpToken, setOtpToken] = useState('');
     const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
@@ -78,15 +78,17 @@ export default function RegisterPage() {
             alert('Please enter your email address');
             return;
         }
-        
+
         // Send OTP when moving from email step
+        /* 
         if (currentStep === 2) {
             await sendOTP();
             return; // sendOTP will handle step transition
         }
-        
+        */
+
         // Skip step 3 (OTP) validation here as it's handled by verifyOTP
-        
+
         if (currentStep === 4) {
             if (!passwordValidation.isValid) {
                 alert('Password does not meet requirements');
