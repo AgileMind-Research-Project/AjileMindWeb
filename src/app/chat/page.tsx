@@ -17,9 +17,10 @@ import { MessageList } from '@/components/communication/MessageList';
 import { MessageInput } from '@/components/communication/MessageInput';
 import { WebSocketProvider } from '@/lib/websocket/WebSocketContext';
 import { useChat } from '@/lib/hooks/useChat';
+import { API_CONFIG } from '@/lib/config/api.config';
 
 // Redis Chat API Configuration
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = `${API_CONFIG.baseURL}/api/v1`;
 
 // Redis Chat API Service
 const redisChatAPI = {

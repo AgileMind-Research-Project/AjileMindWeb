@@ -1,15 +1,21 @@
 /**
- * Socket.IO Client for WebRTC Signaling
- * 
- * Handles real-time communication for:
- * - WebRTC signaling (offer/answer/ICE)
- * - Chat message synchronization
- * - Participant status updates
+ * Socket.IO Client for Real-Time Features
+ * Handles WebRTC signaling, chat, and presence
  */
 
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v1$/, '') || 'http://localhost:8000';
+// Dynamic Socket.IO URL - uses current hostname
+const getSocketURL = () => {
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const hostname = window.location.hostname;
+        return `${window.location.protocol}//${hostname}:8000`;
+    }
+    return 'http://localhost:8000';
+};
+
+const SOCKET_URL = getSocketURL();
 const SOCKET_PATH = '/socket.io/';
 
 export interface SocketEvents {
@@ -87,7 +93,7 @@ class SocketClient {
         this.socket.on('connect_error', (error) => {
             console.error('❌ Socket connection error:', error.message);
         });
-        
+
         // Debug: Log ALL incoming events
         this.socket.onAny((eventName, ...args) => {
             console.log(`📨 Socket event received: ${eventName}`, args);

@@ -52,6 +52,7 @@ export interface PeerConnectionCallbacks {
     onIceCandidate: (candidate: RTCIceCandidate) => void;
     onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
     onIceConnectionStateChange?: (state: RTCIceConnectionState) => void;
+    onIceGatheringStateChange?: (state: RTCIceGatheringState) => void;
 }
 
 /**
@@ -69,14 +70,14 @@ export function createPeerConnection(
         const stream = event.streams[0];
         if (stream) {
             console.log('📥 Stream has', stream.getVideoTracks().length, 'video tracks,', stream.getAudioTracks().length, 'audio tracks');
-            
+
             // Log when video track becomes active/inactive
             stream.getVideoTracks().forEach(track => {
                 track.onended = () => console.log('🔴 Video track ended');
                 track.onmute = () => console.log('🔇 Video track muted');
                 track.onunmute = () => console.log('🔊 Video track unmuted');
             });
-            
+
             // Log when audio track becomes active/inactive
             stream.getAudioTracks().forEach(track => {
                 console.log(`🎤 Audio track: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
@@ -84,7 +85,7 @@ export function createPeerConnection(
                 track.onmute = () => console.log('🔇 Audio track muted');
                 track.onunmute = () => console.log('🔊 Audio track unmuted');
             });
-            
+
             callbacks.onTrack(stream);
         }
     };
@@ -106,6 +107,11 @@ export function createPeerConnection(
     pc.oniceconnectionstatechange = () => {
         console.log('🧊 ICE connection state:', pc.iceConnectionState);
         callbacks.onIceConnectionStateChange?.(pc.iceConnectionState);
+    };
+
+    pc.onicegatheringstatechange = () => {
+        console.log('🧊 ICE gathering state:', pc.iceGatheringState);
+        callbacks.onIceGatheringStateChange?.(pc.iceGatheringState);
     };
 
     return pc;

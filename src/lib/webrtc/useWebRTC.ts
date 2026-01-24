@@ -47,10 +47,10 @@ export function useWebRTC(params: UseWebRTCParams) {
 
     useEffect(() => {
         if (!userId || !localStream) {
-            console.log('⏳ WebRTC waiting for:', { 
-                hasUserId: !!userId, 
+            console.log('⏳ WebRTC waiting for:', {
+                hasUserId: !!userId,
                 userId: userId || 'none',
-                hasLocalStream: !!localStream 
+                hasLocalStream: !!localStream
             });
             return;
         }
@@ -71,7 +71,7 @@ export function useWebRTC(params: UseWebRTCParams) {
             const pc = webrtc.createPeerConnection({
                 onTrack: (stream) => {
                     console.log(`📥 Received stream from ${username}`);
-                    
+
                     // Listen for track unmute to update UI when video starts flowing
                     stream.getVideoTracks().forEach(track => {
                         track.onunmute = () => {
@@ -93,7 +93,7 @@ export function useWebRTC(params: UseWebRTCParams) {
                             });
                         };
                     });
-                    
+
                     setRemoteStreams(prev => {
                         const next = new Map(prev);
                         next.set(oderId, stream);
@@ -224,7 +224,60 @@ export function useWebRTC(params: UseWebRTCParams) {
         socket.on('ice-candidate', async (data) => {
             const peerData = peerConnections.get(data.from);
             if (peerData) {
-                await webrtc.addIceCandidate(peerData.peerConnection, data.candidate);
+                const pc = peerData.peerConnection;
+
+                // Check if we can add the candidate immediately
+                if (pc.remoteDescription) {
+                    await webrtc.addIceCandidate(pc, data.candidate);
+                } else {
+                    // Queue the candidate
+                    console.log(`🧊 Queueing ICE candidate for ${data.from} (no remote description)`);
+
+                    // We need to store this queue somewhere. 
+                    // Since we can't easily modify the Map value type in this hook without breaking changes, 
+                    // we'll attach it to the PC object temporarily or use a side map.
+                    // For safety, let's use a closure-based queue since this effect runs once.
+                    // However, we need to access it when the answer/offer arrives.
+
+                    // BETTER APPROACH: Add a listener for 'signalingstatechange' to drain the queue?
+                    // Or just use a mutable queue map in the scope of this effect.
+
+                    if (!(pc as any).__iceCandidateQueue) {
+                        (pc as any).__iceCandidateQueue = [];
+
+                        // Add listener to drain queue when remote description is set
+                        const checkQueue = async () => {
+                            if (pc.remoteDescription && (pc as any).__iceCandidateQueue.length > 0) {
+                                console.log(`🧊 Draining ${(pc as any).__iceCandidateQueue.length} ICE candidates for receiving peer`);
+                                for (const candidate of (pc as any).__iceCandidateQueue) {
+                                    await webrtc.addIceCandidate(pc, candidate);
+                                }
+                                (pc as any).__iceCandidateQueue = [];
+                            }
+                        };
+
+                        // Listen for signaling state changes
+                        pc.onsignalingstatechange = () => {
+                            if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer' || pc.signalingState === 'have-remote-offer') {
+                                checkQueue();
+                            }
+                        };
+
+                        // Also hook into our wrapper's setRemoteDescription if possible?
+                        // No, we can just poll or rely on the event.
+
+                        // Create an interval just in case event misses (safety net)
+                        const interval = setInterval(() => {
+                            if (pc.remoteDescription) {
+                                checkQueue();
+                                clearInterval(interval);
+                            }
+                            if (pc.connectionState === 'closed') clearInterval(interval);
+                        }, 500);
+                    }
+
+                    (pc as any).__iceCandidateQueue.push(data.candidate);
+                }
             }
         });
 

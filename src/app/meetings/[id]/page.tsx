@@ -263,7 +263,7 @@ export default function MeetingRoomPage() {
                             next.delete(currentUserId);
                             return next;
                         });
-                        
+
                         // Emit stopped speaking
                         if (lastSpeakingState) {
                             lastSpeakingState = false;
@@ -303,7 +303,10 @@ export default function MeetingRoomPage() {
                 }
 
                 const audioContext = audioContextRef.current;
-                const source = audioContext.createMediaStreamSource(stream);
+                // Clone the stream to prevent hijacking the audio from the <audio> element
+                // createMediaStreamSource can mute the original stream in some browsers
+                const clonedStream = stream.clone();
+                const source = audioContext.createMediaStreamSource(clonedStream);
                 const analyzer = audioContext.createAnalyser();
                 analyzer.fftSize = 512;
                 analyzer.smoothingTimeConstant = 0.8;
@@ -365,7 +368,7 @@ export default function MeetingRoomPage() {
 
         const handleUserSpeaking = (data: { user_id: string; username: string; speaking: boolean }) => {
             console.log(`🗣️ User speaking event: ${data.username} (${data.user_id}) speaking=${data.speaking}`);
-            
+
             setSpeakingUsers(prev => {
                 const next = new Set(prev);
                 if (data.speaking) {
@@ -473,7 +476,7 @@ export default function MeetingRoomPage() {
 
         } catch (error: any) {
             console.error('Failed to access media devices:', error);
-            
+
             // Try audio-only if video fails (common when camera is used by another app)
             try {
                 console.log('📹 Video failed, trying audio-only...');
@@ -485,15 +488,15 @@ export default function MeetingRoomPage() {
                         autoGainControl: true,
                     },
                 });
-                
+
                 setLocalStream(audioStream);
                 setInMeeting(true);
                 alert('Camera unavailable (may be used by another browser). Joining with audio only.');
                 await autoJoinMeeting();
-                
+
             } catch (audioError) {
                 console.error('Audio-only also failed:', audioError);
-                
+
                 // Provide specific error messages
                 if (error.name === 'NotAllowedError') {
                     alert('Camera/Microphone permission denied. Please allow access in your browser settings.');
@@ -746,42 +749,58 @@ export default function MeetingRoomPage() {
                                 .map((participant) => {
                                     const stream = remoteStreams.get(participant.user_id);
                                     const status = participantStatus.get(participant.user_id) || { mic: true, camera: true };
-                                    
+
                                     // Check video track state more thoroughly
                                     const videoTrack = stream?.getVideoTracks()[0];
-                                    const trackInfo = videoTrack ? 
-                                        `enabled=${videoTrack.enabled}, readyState=${videoTrack.readyState}, muted=${videoTrack.muted}` : 
+                                    const trackInfo = videoTrack ?
+                                        `enabled=${videoTrack.enabled}, readyState=${videoTrack.readyState}, muted=${videoTrack.muted}` :
                                         'no track';
-                                    
+
                                     // Show video ONLY if:
-                                    // 1. Camera status is on (from WebSocket)
-                                    // 2. Stream exists with a valid video track
-                                    // 3. Track is NOT muted (muted = no actual data flowing)
-                                    const hasValidVideoTrack = videoTrack && 
-                                        videoTrack.readyState === 'live' && 
-                                        !videoTrack.muted;  // KEY: Check muted state!
-                                    const shouldShowVideo = status.camera && stream && hasValidVideoTrack;
-                                    
+                                    // 1. Camera status is on (from WebSocket) OR
+                                    // 2. We are receiving actual video data (stream is active and unmuted) - Trust data over signaling!
+                                    const hasValidVideoTrack = videoTrack &&
+                                        videoTrack.readyState === 'live' &&
+                                        !videoTrack.muted;
+
+                                    // Relaxed condition: If we have a valid video track, show it! 
+                                    // Sometimes signaling (status.camera) might be out of sync, but if we have video, we should show it.
+                                    const shouldShowVideo = (status.camera && stream) || (stream && hasValidVideoTrack);
+
                                     console.log(`🎥 Participant ${participant.username}: camera=${status.camera}, hasStream=${!!stream}, trackInfo=${trackInfo}, shouldShowVideo=${shouldShowVideo}`);
 
                                     return (
                                         <div
                                             key={participant.user_id}
                                             className={`relative bg-gray-800 rounded-lg overflow-hidden transition-all duration-200 ${speakingUsers.has(participant.user_id)
-                                                    ? 'ring-4 ring-green-500 animate-pulse'
-                                                    : ''
+                                                ? 'ring-4 ring-green-500 animate-pulse'
+                                                : ''
                                                 }`}
                                         >
                                             {/* AUDIO ELEMENT - Always render to play remote audio even when video is hidden */}
                                             {stream && (
                                                 <audio
                                                     key={`audio-${participant.user_id}`}
+                                                    id={`remote-audio-${participant.user_id}`}
                                                     ref={(audio) => {
                                                         if (audio && stream) {
                                                             if (audio.srcObject !== stream) {
                                                                 console.log(`🔊 Setting audio srcObject for ${participant.username}`);
                                                                 audio.srcObject = stream;
+                                                                audio.volume = 1.0;
+                                                                audio.muted = false;
+                                                                // Force unmute every 2 seconds to overcome browser restrictions
+                                                                setInterval(() => {
+                                                                    if (audio.muted) {
+                                                                        audio.muted = false;
+                                                                        audio.volume = 1.0;
+                                                                    }
+                                                                    if (audio.paused) {
+                                                                        audio.play().catch(() => { });
+                                                                    }
+                                                                }, 2000);
                                                             }
+                                                            // Ensure playing
                                                             if (audio.paused) {
                                                                 audio.play().catch(err => {
                                                                     console.warn(`⚠️ Audio autoplay blocked for ${participant.username}:`, err);
@@ -790,25 +809,57 @@ export default function MeetingRoomPage() {
                                                         }
                                                     }}
                                                     autoPlay
-                                                    style={{ display: 'none' }}  // Hidden audio element
+                                                    muted={false}
+                                                    style={{ display: 'none' }}
+                                                    onLoadedData={(e) => {
+                                                        const audio = e.target as HTMLAudioElement;
+                                                        audio.volume = 1.0;
+                                                        audio.muted = false;
+                                                        audio.play().catch(err => console.log('🔊 Audio play on load:', err.message));
+                                                    }}
+                                                    onCanPlay={(e) => {
+                                                        const audio = e.target as HTMLAudioElement;
+                                                        audio.muted = false;
+                                                        audio.volume = 1.0;
+                                                        audio.play().catch(err => console.log('🔊 Audio play on can play:', err.message));
+                                                    }}
                                                 />
                                             )}
-                                            
+
                                             {shouldShowVideo ? (
                                                 <video
-                                                    key={`video-${participant.user_id}-${videoTrack?.id || 'no-track'}`}
+                                                    key={`video-${participant.user_id}-${videoTrack?.id || 'no-track'}-${videoTrack?.muted}-${videoTrack?.enabled}`}
                                                     ref={(video) => {
                                                         if (video && stream) {
-                                                            // Only set srcObject if it changed to avoid re-triggering
-                                                            if (video.srcObject !== stream) {
-                                                                console.log(`🎬 Setting video srcObject for ${participant.username}`);
-                                                                video.srcObject = stream;
-                                                            }
-                                                            // Ensure video plays (browsers may block autoplay)
-                                                            if (video.paused) {
-                                                                video.play().catch(err => {
-                                                                    console.warn(`⚠️ Video autoplay blocked for ${participant.username}:`, err);
-                                                                });
+                                                            try {
+                                                                // Always update srcObject if different, or if we suspect it needs a kick
+                                                                if (video.srcObject !== stream) {
+                                                                    console.log(`🎬 Setting video srcObject for ${participant.username}`);
+                                                                    video.srcObject = stream;
+                                                                }
+
+                                                                // Enforce properties
+                                                                video.playsInline = true;
+                                                                video.autoplay = true;
+                                                                video.muted = true; // IMPORTANT: Mute the element so it can autoplay
+
+                                                                // Ensure playback
+                                                                if (video.paused) {
+                                                                    const playPromise = video.play();
+                                                                    if (playPromise !== undefined) {
+                                                                        playPromise.catch(err => {
+                                                                            console.warn(`⚠️ Video autoplay blocked for ${participant.username}:`, err);
+                                                                            // Retry once after a short delay
+                                                                            setTimeout(() => {
+                                                                                if (video && video.paused) {
+                                                                                    video.play().catch(e => console.error('Retry play failed:', e));
+                                                                                }
+                                                                            }, 1000);
+                                                                        });
+                                                                    }
+                                                                }
+                                                            } catch (e) {
+                                                                console.error('Error in video ref:', e);
                                                             }
                                                         }
                                                     }}
@@ -819,10 +870,12 @@ export default function MeetingRoomPage() {
                                                     onLoadedMetadata={(e) => {
                                                         const video = e.target as HTMLVideoElement;
                                                         console.log(`✅ Video metadata loaded for ${participant.username}: ${video.videoWidth}x${video.videoHeight}`);
-                                                        video.play().catch(() => {});
+                                                        video.play().catch(() => { });
                                                     }}
                                                     onCanPlay={(e) => {
                                                         console.log(`▶️ Video can play for ${participant.username}`);
+                                                        const video = e.target as HTMLVideoElement;
+                                                        video.play().catch(() => { });
                                                     }}
                                                     onPlaying={(e) => {
                                                         const video = e.target as HTMLVideoElement;
@@ -1127,6 +1180,84 @@ export default function MeetingRoomPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
                         </svg>
                     </button>
+
+                    {/* Debug Toggle - Hidden by default unless dev */}
+                    <button
+                        onClick={() => {
+                            const debugPanel = document.getElementById('debug-panel');
+                            if (debugPanel) debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+                        }}
+                        className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 text-white ml-2"
+                        title="Toggle Debug Info"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            {/* Debug Panel */}
+            <div id="debug-panel" className="fixed bottom-20 right-4 w-[500px] h-[300px] bg-black/90 text-green-400 p-4 rounded border border-green-500 font-mono text-xs overflow-auto z-50">
+                <h3 className="border-b border-green-500 mb-2 font-bold flex justify-between">
+                    <span>WebRTC Debug Info</span>
+                    <button onClick={() => document.getElementById('debug-panel')!.style.display = 'none'} className="text-red-500 hover:text-red-400">Close</button>
+                </h3>
+
+                <div className="space-y-4">
+                    <div>
+                        <div className="font-bold text-white mb-1">Local Stream:</div>
+                        {localStream ? (
+                            <div>
+                                <span className="text-blue-300">ID: {localStream.id}</span>
+                                {localStream.getTracks().map(t => (
+                                    <div key={t.id} className="pl-2">
+                                        - {t.kind}: enabled={String(t.enabled)}, state={t.readyState}, muted={String(t.muted)}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : <span className="text-red-400">No local stream</span>}
+                    </div>
+
+                    <div>
+                        <div className="font-bold text-white mb-1">Remote Streams ({remoteStreams.size}):</div>
+                        {Array.from(remoteStreams.entries()).map(([userId, stream]) => {
+                            const participant = apiParticipants.find(p => p.user_id === userId);
+                            const status = participantStatus.get(userId);
+                            return (
+                                <div key={userId} className="mb-2 border-l-2 border-blue-500 pl-2">
+                                    <div className="text-blue-300 font-bold">{participant?.username || userId}</div>
+                                    <div>Stream ID: {stream.id}</div>
+                                    <div>Tracks: {stream.getTracks().length}</div>
+                                    {stream.getTracks().map(t => (
+                                        <div key={t.id} className="pl-2">
+                                            - {t.kind}: enabled=<span className={t.enabled ? 'text-green-400' : 'text-red-400'}>{String(t.enabled)}</span>,
+                                            state=<span className={t.readyState === 'live' ? 'text-green-400' : 'text-red-400'}>{t.readyState}</span>,
+                                            muted=<span className={t.muted ? 'text-red-400' : 'text-green-400'}>{String(t.muted)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="text-yellow-400">
+                                        Socket Status: Mic={String(status?.mic)}, Camera={String(status?.camera)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {remoteStreams.size === 0 && <span className="text-gray-500">No remote streams</span>}
+                    </div>
+
+                    <div>
+                        <div className="font-bold text-white mb-1">Peer Connections ({peerConnections.size}):</div>
+                        {Array.from(peerConnections.entries()).map(([sessionId, data]) => {
+                            return (
+                                <div key={sessionId} className="mb-1">
+                                    <span className="text-orange-300">{sessionId.substring(0, 8)}...</span>:
+                                    State={data.peerConnection.connectionState},
+                                    ICE={data.peerConnection.iceConnectionState}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
         </div>

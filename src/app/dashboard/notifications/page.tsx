@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { API_CONFIG } from '@/lib/config/api.config';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Notification {
@@ -31,9 +32,8 @@ export default function NotificationsPage() {
 
         try {
             const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            const response = await fetch(`${apiUrl}/api/v1/notifications`, {
+            const response = await fetch(`${API_CONFIG.baseURL}/api/v1/notifications`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -60,9 +60,8 @@ export default function NotificationsPage() {
     const markAsRead = async (notificationId: number) => {
         try {
             const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-            const response = await fetch(`${apiUrl}/api/v1/notifications/${notificationId}/read`, {
+            const response = await fetch(`${API_CONFIG.baseURL}/api/v1/notifications/${notificationId}/read`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,

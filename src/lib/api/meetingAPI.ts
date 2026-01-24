@@ -8,7 +8,9 @@
  * - Transcript storage
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+import { API_CONFIG } from '@/lib/config/api.config';
+
+const API_URL = `${API_CONFIG.baseURL}/api/v1`;
 
 // Get JWT token from storage
 const getToken = (): string | null => {
