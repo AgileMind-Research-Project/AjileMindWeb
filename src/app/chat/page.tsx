@@ -241,6 +241,12 @@ function ChatContent() {
     const [showMeetingModal, setShowMeetingModal] = useState(false);
     const [startingMeeting, setStartingMeeting] = useState(false);
 
+    // Transcripts State
+    const [showTranscriptsModal, setShowTranscriptsModal] = useState(false);
+    const [transcriptsList, setTranscriptsList] = useState<any[]>([]);
+    const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
+    const [loadingTranscripts, setLoadingTranscripts] = useState(false);
+
     const channels = useChatStore((state) => state.channels);
     const activeChannelId = useChatStore((state) => state.activeChannelId);
     const setChannels = useChatStore((state) => state.setChannels);
@@ -499,6 +505,30 @@ function ChatContent() {
         }
     };
 
+    const handleOpenTranscripts = async () => {
+        if (!activeChannelId) return;
+
+        setShowTranscriptsModal(true);
+        setLoadingTranscripts(true);
+        setTranscriptsList([]); // Clear previous
+
+        try {
+            // Import meeting API dynamically
+            const { meetingAPI } = await import('@/lib/api/meetingAPI');
+
+            const response = await meetingAPI.getChannelTranscripts(activeChannelId);
+
+            if (response.success && response.data?.transcripts) {
+                setTranscriptsList(response.data.transcripts);
+            }
+        } catch (error) {
+            console.error('Failed to load transcripts:', error);
+            alert('Failed to load transcripts');
+        } finally {
+            setLoadingTranscripts(false);
+        }
+    };
+
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Channel Sidebar */}
@@ -536,6 +566,18 @@ function ChatContent() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
+                                    {/* Transcripts Button */}
+                                    <button
+                                        onClick={handleOpenTranscripts}
+                                        className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
+                                        title="View meeting transcripts"
+                                    >
+                                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Transcripts
+                                    </button>
+
                                     {/* Start Meeting Button */}
                                     <button
                                         onClick={handleOpenMeetingModal}
@@ -760,6 +802,121 @@ function ChatContent() {
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Transcripts Modal */}
+            {showTranscriptsModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col shadow-xl">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                            <div className="flex items-center gap-3">
+                                {selectedTranscript && (
+                                    <button
+                                        onClick={() => setSelectedTranscript(null)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                        </svg>
+                                    </button>
+                                )}
+                                <h2 className="text-xl font-semibold text-gray-900">
+                                    {selectedTranscript ? selectedTranscript.title || 'Meeting Transcript' : 'Meeting Transcripts'}
+                                </h2>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowTranscriptsModal(false);
+                                    setSelectedTranscript(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-hidden">
+                            {loadingTranscripts ? (
+                                <div className="h-full flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                </div>
+                            ) : selectedTranscript ? (
+                                // Detail View
+                                <div className="h-full flex flex-col">
+                                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between text-sm text-gray-500">
+                                        <div>
+                                            {new Date(selectedTranscript.stored_at).toLocaleString()} • {selectedTranscript.metadata?.duration || 'Unknown duration'}
+                                        </div>
+                                        <div>
+                                            Participants: {selectedTranscript.metadata?.participants?.join(', ') || 'Unknown'}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-6 bg-white font-mono text-sm whitespace-pre-wrap">
+                                        {selectedTranscript.content}
+                                    </div>
+                                </div>
+                            ) : (
+                                // List View
+                                <div className="h-full overflow-y-auto p-6">
+                                    {transcriptsList.length === 0 ? (
+                                        <div className="text-center text-gray-500 py-12">
+                                            <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <h3 className="text-lg font-medium text-gray-900">No transcripts found</h3>
+                                            <p className="mt-1">Meeting transcripts will appear here after meetings referencing this channel end.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-4">
+                                            {transcriptsList.map((transcript) => (
+                                                <div
+                                                    key={transcript.meeting_id}
+                                                    onClick={() => setSelectedTranscript(transcript)}
+                                                    className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all group"
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h3 className="text-lg font-medium text-gray-900 group-hover:text-blue-600">
+                                                                {transcript.title || 'Untitled Meeting'}
+                                                            </h3>
+                                                            <p className="text-sm text-gray-500 mt-1">
+                                                                {new Date(transcript.stored_at).toLocaleString(undefined, {
+                                                                    dateStyle: 'full',
+                                                                    timeStyle: 'short'
+                                                                })}
+                                                            </p>
+                                                        </div>
+                                                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                                            Detailed
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
+                                                        <div className="flex items-center gap-1">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                                            </svg>
+                                                            {transcript.metadata?.participants?.length || 0} participants
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                                            </svg>
+                                                            {transcript.metadata?.message_count || 0} messages
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

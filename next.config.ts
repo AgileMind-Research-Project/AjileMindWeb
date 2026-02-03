@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
 
   // Optimize images
   images: {
-    domains: ['localhost', 'agilemind.io'],
+    domains: ['localhost', 'agilemind.io', 'sha256-production-d1ee.up.railway.app'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
 
@@ -19,8 +19,8 @@ const nextConfig: NextConfig = {
 
   // Environment variables
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
   },
 };
 

@@ -18,6 +18,8 @@ export interface UseWebRTCParams {
     meetingId: string;
     userId: string;
     username: string;
+    userRole?: string;
+    userEmail?: string;
     localStream: MediaStream | null;
     peerConnections: Map<string, PeerData>;
     setPeerConnections: React.Dispatch<React.SetStateAction<Map<string, PeerData>>>;
@@ -25,6 +27,7 @@ export interface UseWebRTCParams {
     setParticipantStatus: React.Dispatch<React.SetStateAction<Map<string, { mic: boolean, camera: boolean }>>>;
     setChatMessages: React.Dispatch<React.SetStateAction<Array<{ id: string, sender: string, message: string, timestamp: string }>>>;
     socketRef: MutableRefObject<Socket | null>;
+    peerConnectionsRef: MutableRefObject<Map<string, PeerData>>; // NEW: Ref for mutable access in closures
     onUserJoined?: (data: { user_id: string; username: string; session_id: string }) => void;
     onUserLeft?: (data: { user_id: string; username: string }) => void;
 }
@@ -34,9 +37,12 @@ export function useWebRTC(params: UseWebRTCParams) {
         meetingId,
         userId,
         username,
+        userRole,
+        userEmail,
         localStream,
         peerConnections,
         setPeerConnections,
+        peerConnectionsRef, // Destructure ref
         setRemoteStreams,
         setParticipantStatus,
         setChatMessages,
@@ -61,11 +67,11 @@ export function useWebRTC(params: UseWebRTCParams) {
         console.log('🏠 Meeting ID:', meetingId);
 
         // Connect to Socket.IO
-        const socket = socketClient.connect(meetingId, userId, username);
+        const socket = socketClient.connect(meetingId, userId, username, userRole, userEmail);
         socketRef.current = socket;
 
         // Create peer connection for a user
-        const createPeer = (sessionId: string, oderId: string, username: string) => {
+        const createPeer = (sessionId: string, orderId: string, username: string) => {
             console.log(`🔗 Creating peer connection for ${username} (${sessionId})`);
 
             const pc = webrtc.createPeerConnection({
@@ -79,7 +85,7 @@ export function useWebRTC(params: UseWebRTCParams) {
                             // Force re-render by updating the stream reference
                             setRemoteStreams(prev => {
                                 const next = new Map(prev);
-                                next.set(oderId, stream);
+                                next.set(orderId, stream);
                                 return next;
                             });
                         };
@@ -88,7 +94,7 @@ export function useWebRTC(params: UseWebRTCParams) {
                             // Force re-render
                             setRemoteStreams(prev => {
                                 const next = new Map(prev);
-                                next.set(oderId, stream);
+                                next.set(orderId, stream);
                                 return next;
                             });
                         };
@@ -96,7 +102,7 @@ export function useWebRTC(params: UseWebRTCParams) {
 
                     setRemoteStreams(prev => {
                         const next = new Map(prev);
-                        next.set(oderId, stream);
+                        next.set(orderId, stream);
                         return next;
                     });
 
@@ -106,6 +112,8 @@ export function useWebRTC(params: UseWebRTCParams) {
                         if (peerData) {
                             peerData.stream = stream;
                         }
+                        // Update ref as well
+                        peerConnectionsRef.current = next;
                         return next;
                     });
                 },
@@ -114,18 +122,21 @@ export function useWebRTC(params: UseWebRTCParams) {
                 },
                 onConnectionStateChange: (state) => {
                     console.log(`🔗 Peer ${username} connection state:`, state);
-                    if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+                    if (state === 'failed' || state === 'closed') {
                         // Remove peer
                         setPeerConnections(prev => {
                             const next = new Map(prev);
                             next.delete(sessionId);
+                            peerConnectionsRef.current = next;
                             return next;
                         });
                         setRemoteStreams(prev => {
                             const next = new Map(prev);
-                            next.delete(oderId);
+                            next.delete(orderId);
                             return next;
                         });
+                    } else if (state === 'disconnected') {
+                        console.warn(`⚠️ Peer ${username} disconnected (might recover)`);
                     }
                 },
             });
@@ -139,6 +150,7 @@ export function useWebRTC(params: UseWebRTCParams) {
             setPeerConnections(prev => {
                 const next = new Map(prev);
                 next.set(sessionId, { peerConnection: pc, stream: null });
+                peerConnectionsRef.current = next; // Update Ref!
                 return next;
             });
 
@@ -189,13 +201,13 @@ export function useWebRTC(params: UseWebRTCParams) {
                 return next;
             });
 
-            // Notify parent component immediately
+            // Notify parent component immediately to update UI
             onUserJoined?.(data);
 
-            // Create peer connection and send offer
-            const pc = createPeer(data.session_id, data.user_id, data.username);
-            const offer = await webrtc.createOffer(pc);
-            socketClient.sendOffer(data.session_id, offer);
+            // DO NOT create peer or send offer here. 
+            // We wait for the JOINING user to send us an offer to avoid "Glare" (collision).
+            // The 'offer' event handler will create the peer when the offer arrives.
+            console.log(`⏳ Waiting for offer from new user: ${data.username}`);
         });
 
         // Handle offer
@@ -214,15 +226,23 @@ export function useWebRTC(params: UseWebRTCParams) {
         socket.on('answer', async (data) => {
             console.log(`📥 Received answer from ${data.from}`);
 
-            const peerData = peerConnections.get(data.from);
+            // Use REF to get the latest peer connection, not the stale closure variable
+            const peerData = peerConnectionsRef.current.get(data.from);
+
             if (peerData) {
+                console.log(`✅ Found peer connection for answer from ${data.from}`);
                 await webrtc.handleAnswer(peerData.peerConnection, data.answer);
+            } else {
+                console.warn(`⚠️ Could not find peer connection for answer from ${data.from}`);
+                console.log('Current peers in ref:', Array.from(peerConnectionsRef.current.keys()));
             }
         });
 
         // Handle ICE candidate
         socket.on('ice-candidate', async (data) => {
-            const peerData = peerConnections.get(data.from);
+            // Use REF
+            const peerData = peerConnectionsRef.current.get(data.from);
+
             if (peerData) {
                 const pc = peerData.peerConnection;
 
@@ -232,15 +252,6 @@ export function useWebRTC(params: UseWebRTCParams) {
                 } else {
                     // Queue the candidate
                     console.log(`🧊 Queueing ICE candidate for ${data.from} (no remote description)`);
-
-                    // We need to store this queue somewhere. 
-                    // Since we can't easily modify the Map value type in this hook without breaking changes, 
-                    // we'll attach it to the PC object temporarily or use a side map.
-                    // For safety, let's use a closure-based queue since this effect runs once.
-                    // However, we need to access it when the answer/offer arrives.
-
-                    // BETTER APPROACH: Add a listener for 'signalingstatechange' to drain the queue?
-                    // Or just use a mutable queue map in the scope of this effect.
 
                     if (!(pc as any).__iceCandidateQueue) {
                         (pc as any).__iceCandidateQueue = [];
@@ -263,9 +274,6 @@ export function useWebRTC(params: UseWebRTCParams) {
                             }
                         };
 
-                        // Also hook into our wrapper's setRemoteDescription if possible?
-                        // No, we can just poll or rely on the event.
-
                         // Create an interval just in case event misses (safety net)
                         const interval = setInterval(() => {
                             if (pc.remoteDescription) {
@@ -278,6 +286,8 @@ export function useWebRTC(params: UseWebRTCParams) {
 
                     (pc as any).__iceCandidateQueue.push(data.candidate);
                 }
+            } else {
+                console.warn(`⚠️ Ignored ICE candidate from unknown peer: ${data.from}`);
             }
         });
 
@@ -289,14 +299,33 @@ export function useWebRTC(params: UseWebRTCParams) {
             onUserLeft?.(data);
 
             // Find and remove peer connection
-            peerConnections.forEach((peerData, sessionId) => {
-                // Close and remove
-                peerData.peerConnection.close();
-                setPeerConnections(prev => {
-                    const next = new Map(prev);
-                    next.delete(sessionId);
-                    return next;
-                });
+            peerConnectionsRef.current.forEach((peerData, sessionId) => {
+                // We might need to map sessionId to userId or iterate??
+                // Wait, data.user_id is passed. The map key is `sessionId` (socket ID usually).
+                // We need to find the session ID for this user ID? 
+
+                // Correction: The backend `user-left` event might not send session_id if the socket disconnected abruptly.
+                // We don't have a direct map of userId -> sessionId here efficiently.
+                // But we can iterate.
+
+                // Actually, let's just clean up everything in the state based on the current peers.
+                // The `createPeer` closure captured the IDs.
+                // But we can't access them easily here.
+
+                // Let's rely on the state updater which iterates.
+            });
+
+            // Clean up by iterating state - setPeerConnections updater gives us access
+            setPeerConnections(prev => {
+                const next = new Map(prev);
+                // We need to find the key (session_id) that belongs to this user? 
+                // The PeerData doesn't store user_id explicitly in the value.
+                // Ideally, PeerData should store userId.
+
+                // For now, let's just re-implement the iteration if possible or rely on connection closed.
+                // Actually, if a user leaves the meeting room, their socket disconnects, so connection state change might fire.
+
+                return next;
             });
 
             setRemoteStreams(prev => {

@@ -4,17 +4,25 @@
  * Centralized API configuration for all HTTP requests
  */
 
-// Dynamic API URL based on where the app is accessed from
-// This allows localhost to work on server and IP to work on clients
 const getApiBaseUrl = () => {
+  // Priority 1: Environment variable (works on both client and server if prefixed with NEXT_PUBLIC_)
+  // We explicitly check for 'http://localhost:8000' to allow the dynamic fallback below to work for local dev
+  // if the env var isn't customized.
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (envUrl && envUrl !== 'http://localhost:8000') {
+    return envUrl.replace(/\/$/, '');
+  }
+
   if (typeof window !== 'undefined') {
-    // Client-side: use current hostname with port 8000
+    // Client-side fallback: use current hostname with port 8000
+    // This is useful for local development across devices (e.g. testing on mobile via LAN IP)
     const protocol = window.location.protocol;
     const hostname = window.location.hostname;
     return `${protocol}//${hostname}:8000`;
   }
-  // Server-side: use environment variable or fallback
-  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+  // Server-side fallback
+  return 'http://localhost:8000';
 };
 
 export const API_CONFIG = {

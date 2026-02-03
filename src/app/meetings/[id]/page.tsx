@@ -18,6 +18,8 @@ import { meetingAPI } from '@/lib/api/meetingAPI';
 import socketClient from '@/lib/websocket/socketClient';
 import * as webrtc from '@/lib/webrtc/peerConnection';
 import { useWebRTC } from '@/lib/webrtc/useWebRTC';
+import { useSpeechRecognition } from '@/lib/hooks/useSpeechRecognition';
+import { TranscriptViewer } from '@/components/meetings/TranscriptViewer';
 import type { Socket } from 'socket.io-client';
 
 interface Participant {
@@ -57,8 +59,12 @@ export default function MeetingRoomPage() {
     const [isHost, setIsHost] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
-    const [chatMessages, setChatMessages] = useState<Array<{ id: string, sender: string, message: string, timestamp: string }>>([]);
+    const [currentUserRole, setCurrentUserRole] = useState<string>('');
+    const [chatMessages, setChatMessages] = useState<Array<{ id: string, sender: string, message: string, timestamp: string, role?: string, user_id?: string, email?: string }>>([]);
     const [chatInput, setChatInput] = useState('');
+    const [meetingStatus, setMeetingStatus] = useState<string>('active'); // NEW: Track status
+    const [transcriptSegments, setTranscriptSegments] = useState<Array<any>>([]);
+    const [activeTab, setActiveTab] = useState<'chat' | 'transcript'>('chat');
 
     // WebRTC State
     const [peerConnections, setPeerConnections] = useState<Map<string, PeerData>>(new Map());
@@ -71,6 +77,7 @@ export default function MeetingRoomPage() {
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioAnalyzersRef = useRef<Map<string, AnalyserNode>>(new Map());
     const localAnalyzerRef = useRef<AnalyserNode | null>(null);
+    const peerConnectionsRef = useRef<Map<string, PeerData>>(new Map()); // NEW: Ref for stable access
 
     const {
         localStream,
@@ -92,9 +99,12 @@ export default function MeetingRoomPage() {
         meetingId,
         userId: currentUserId,
         username: currentUserEmail || currentUserId, // User email for chat display
+        userRole: currentUserRole,
+        userEmail: currentUserEmail,
         localStream,
         peerConnections,
         setPeerConnections,
+        peerConnectionsRef, // Pass ref to hook
         setRemoteStreams,
         setParticipantStatus,
         setChatMessages,
@@ -124,6 +134,50 @@ export default function MeetingRoomPage() {
         },
     });
 
+    // Speech Recognition Integration
+    const { error: speechError } = useSpeechRecognition({
+        isListening: isAudioEnabled && isInMeeting, // Only listen when mic is ON and in meeting
+        minConfidence: 0.8, // Require 80% confidence to avoid "ghost" transcripts
+        onResult: (text, isFinal) => {
+            // Send finalized speech to server
+            if (isFinal) {
+                console.log('🗣️ Unmute & Speech detected:', text);
+                socketClient.sendTranscriptSegment(text, true);
+            }
+        },
+    });
+
+    // Log speech errors if any
+    useEffect(() => {
+        if (speechError) {
+            console.warn('⚠️ Speech recognition error:', speechError);
+        }
+    }, [speechError]);
+
+    // Callback ref to set video srcObject when element mounts
+    const setVideoRef = React.useCallback((element: HTMLVideoElement | null) => {
+        // Store the ref
+        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = element;
+
+        // Set srcObject when element is available and we have a stream
+        if (element && localStream) {
+            if (element.srcObject !== localStream) {
+                element.srcObject = localStream;
+                console.log('✅ Video srcObject set successfully via callback ref');
+            }
+        }
+    }, [localStream]);
+
+    // Update video element when local stream changes
+    useEffect(() => {
+        if (videoRef.current && localStream) {
+            if (videoRef.current.srcObject !== localStream) {
+                videoRef.current.srcObject = localStream;
+                console.log('✅ Video srcObject updated via effect');
+            }
+        }
+    }, [localStream, isVideoEnabled]);
+
     // Initialize meeting on mount
     useEffect(() => {
         // Get current user ID FIRST before anything else
@@ -141,14 +195,18 @@ export default function MeetingRoomPage() {
                 const payload = JSON.parse(atob(actualToken.split('.')[1]));
                 const userId = payload.user_id || payload.sub || '';
                 const userEmail = payload.email || payload.username || userId;
+                const userRole = payload.role || 'Participant';
+
                 setCurrentUserId(userId);
                 setCurrentUserEmail(userEmail);
-                console.log('👤 Current user:', userId, userEmail);
+                setCurrentUserRole(userRole);
+                console.log('👤 Current user:', userId, userEmail, userRole);
             }
         } catch (error) {
             console.error('Failed to decode token:', error);
         }
 
+        // Only initialize once
         initializeMeeting();
         loadMeetingData();
 
@@ -157,34 +215,25 @@ export default function MeetingRoomPage() {
             loadMeetingData();
         }, 3000);
 
-        // Poll for join requests if host
+        return () => {
+            clearInterval(participantInterval);
+            // Cleanup on unmount
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []); // Run only once
+
+    // Separate effect for host polling
+    useEffect(() => {
         const requestInterval = setInterval(() => {
             if (isHost) {
                 loadJoinRequests();
             }
         }, 5000);
 
-        return () => {
-            clearInterval(participantInterval);
-            clearInterval(requestInterval);
-            // Cleanup on unmount
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-        };
-    }, [isHost]);
-
-    // Callback ref to set video srcObject when element mounts
-    const setVideoRef = (element: HTMLVideoElement | null) => {
-        // Store the ref
-        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = element;
-
-        // Set srcObject when element is available and we have a stream
-        if (element && localStream) {
-            element.srcObject = localStream;
-            console.log('✅ Video srcObject set successfully via callback ref');
-        }
-    };
+        return () => clearInterval(requestInterval);
+    }, [isHost, meetingId]);
 
     // Update video element when local stream changes
     useEffect(() => {
@@ -388,6 +437,118 @@ export default function MeetingRoomPage() {
     }, []);
 
 
+    // Convert chat messages to transcript segments (group consecutive messages from same speaker)
+    useEffect(() => {
+        const segments: any[] = [];
+        let currentSegment: any = null;
+
+        chatMessages.forEach((msg) => {
+            const userId = msg.user_id || msg.sender;
+            const username = msg.sender;
+            const role = msg.role || 'Participant';
+
+            // Format timestamp
+            let timeDisplay = msg.timestamp;
+            try {
+                const dt = new Date(msg.timestamp);
+                timeDisplay = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } catch {
+                // Keep original if parsing fails
+            }
+
+            // Check if we should start a new segment
+            if (!currentSegment || currentSegment.user_id !== userId) {
+                // Save previous segment
+                if (currentSegment) {
+                    segments.push(currentSegment);
+                }
+
+                // Start new segment
+                currentSegment = {
+                    user_id: userId,
+                    username: username,
+                    role: role,
+                    timestamp: timeDisplay,
+                    messages: [msg.message],
+                };
+            } else {
+                // Add to current segment
+                currentSegment.messages.push(msg.message);
+            }
+        });
+
+        // Don't forget the last segment
+        if (currentSegment) {
+            segments.push(currentSegment);
+        }
+
+        setTranscriptSegments(segments);
+    }, [chatMessages]);
+
+    // Export transcript function
+    const handleExportTranscript = (format: 'txt' | 'json') => {
+        if (format === 'txt') {
+            // Create Teams-style text format
+            const lines = [];
+            lines.push('================================================================================');
+            lines.push('MEETING TRANSCRIPT');
+            lines.push('================================================================================');
+            lines.push(`Meeting: "${channelTitle || meetingData?.title || 'Untitled Meeting'}"`);
+            lines.push(`Date: ${new Date().toLocaleString()}`);
+            lines.push(`Participants: ${apiParticipants.length}`);
+            lines.push('');
+
+            if (apiParticipants.length > 0) {
+                lines.push('ATTENDEES:');
+                apiParticipants.forEach(p => {
+                    lines.push(`- ${p.username}`);
+                });
+                lines.push('');
+            }
+
+            lines.push('================================================================================');
+            lines.push('CONVERSATION');
+            lines.push('================================================================================');
+            lines.push('');
+
+            transcriptSegments.forEach(segment => {
+                const roleDisplay = segment.role && segment.role !== 'Participant' ? ` (${segment.role})` : '';
+                lines.push(`[${segment.timestamp}] ${segment.username}${roleDisplay}`);
+                segment.messages.forEach((msg: string) => {
+                    lines.push(msg);
+                });
+                lines.push('');
+            });
+
+            const content = lines.join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcript-${meetingId.slice(0, 8)}-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else if (format === 'json') {
+            const data = {
+                meeting_id: meetingId,
+                meeting_title: channelTitle || meetingData?.title || 'Untitled Meeting',
+                date: new Date().toISOString(),
+                participants: apiParticipants,
+                transcript: transcriptSegments,
+            };
+
+            const content = JSON.stringify(data, null, 2);
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcript-${meetingId.slice(0, 8)}-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
+
+
     const loadMeetingData = async () => {
         try {
             const response = await meetingAPI.getMeeting(meetingId);
@@ -403,6 +564,14 @@ export default function MeetingRoomPage() {
                     const userId = payload.user_id || payload.sub;
                     setIsHost(response.data.created_by_user_id === userId);
                 }
+
+                if (response.data.status === 'ended') {
+                    alert('This meeting has ended.');
+                    router.push('/chat');
+                    return;
+                }
+
+                setMeetingStatus(response.data.status);
 
                 // Load participants
                 const partResponse = await meetingAPI.getParticipants(meetingId);
@@ -583,16 +752,40 @@ export default function MeetingRoomPage() {
 
     const handleEndMeeting = async () => {
         try {
-            // Store transcript
-            const transcript = `Meeting "${meetingData?.title}" ended at ${new Date().toISOString()}\nParticipants: ${apiParticipants.length}`;
+            // End meeting FIRST (so "Meeting Ended" message appears first)
+            await meetingAPI.endMeeting(meetingId);
+
+            // Then store transcript (so "Meeting Summary" appears second)
+            // Generate formatted transcript
+            let transcriptLines = [`Meeting "${meetingData?.title}" ended at ${new Date().toISOString()}`];
+            transcriptLines.push(`Participants: ${apiParticipants.length}`);
+            transcriptLines.push('---');
+
+            // Add participants list
+            if (apiParticipants.length > 0) {
+                transcriptLines.push('Attendees:');
+                apiParticipants.forEach(p => {
+                    // We might not have roles for all API participants unless we fetch them, 
+                    // but we can list names/emails.
+                    transcriptLines.push(`- ${p.username}`);
+                });
+                transcriptLines.push('---');
+            }
+
+            // Add chat history
+            transcriptLines.push('Transcript:');
+            chatMessages.forEach(msg => {
+                const roleDisplay = msg.role ? `(${msg.role})` : '';
+                transcriptLines.push(`[${msg.timestamp}] ${msg.sender} ${roleDisplay}: ${msg.message}`);
+            });
+
+            const transcript = transcriptLines.join('\n');
+
             await meetingAPI.storeTranscript(meetingId, transcript, 'text', {
                 participants: apiParticipants.length,
                 duration: 'N/A',
                 ended_by: currentUserId
             });
-
-            // End meeting
-            await meetingAPI.endMeeting(meetingId);
 
             leaveMeeting();
             router.push('/chat');
@@ -656,6 +849,16 @@ export default function MeetingRoomPage() {
                 </div>
 
                 <div className="flex items-center gap-4">
+                    {/* Connection Status */}
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${socketRef.current?.connected
+                        ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                        : 'bg-red-500/10 text-red-500 border-red-500/20'
+                        }`}>
+                        <div className={`w-2 h-2 rounded-full ${socketRef.current?.connected ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+                            }`} />
+                        {socketRef.current?.connected ? 'Live' : 'Disconnected'}
+                    </div>
+
                     {/* Participant Count */}
                     <button
                         onClick={() => setShowParticipants(!showParticipants)}
@@ -705,14 +908,14 @@ export default function MeetingRoomPage() {
                                         style={{ transform: 'scaleX(-1)' }}
                                     />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
                                         <div className="text-center">
-                                            <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className="w-32 h-32 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                                                <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
                                             </div>
-                                            <p className="text-lg font-semibold text-white">You</p>
+                                            <p className="text-2xl font-bold text-white drop-shadow-md">You</p>
                                         </div>
                                     </div>
                                 )}
@@ -886,23 +1089,23 @@ export default function MeetingRoomPage() {
                                                     }}
                                                 />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600">
+                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
                                                     <div className="text-center">
-                                                        <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                                                            <span className="text-4xl font-bold text-white">
+                                                        <div className="w-32 h-32 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                                                            <span className="text-5xl font-bold text-white">
                                                                 {participant.username.charAt(0).toUpperCase()}
                                                             </span>
                                                         </div>
-                                                        <p className="text-lg font-semibold text-white truncate px-4">
+                                                        <p className="text-2xl font-bold text-white truncate px-4 drop-shadow-md">
                                                             {participant.username.split('@')[0]}
                                                         </p>
-                                                        {/* Show appropriate status message */}
+                                                        {/* Status text */}
                                                         {!stream ? (
-                                                            <p className="text-xs text-white/60 mt-1">Waiting for connection...</p>
+                                                            <p className="text-sm text-white/80 mt-2 font-medium">Waiting for connection...</p>
                                                         ) : videoTrack?.muted ? (
-                                                            <p className="text-xs text-yellow-200 mt-1">📶 Connecting video...</p>
+                                                            <p className="text-sm text-yellow-200 mt-2 font-medium animate-pulse">📶 Connecting video...</p>
                                                         ) : !status.camera ? (
-                                                            <p className="text-xs text-white/60 mt-1">Camera off</p>
+                                                            <p className="text-sm text-white/60 mt-2">Camera off</p>
                                                         ) : null}
                                                     </div>
                                                 </div>
@@ -955,12 +1158,15 @@ export default function MeetingRoomPage() {
                     </div>
                 </div>
 
-                {/* Chat Sidebar */}
+                {/* Chat/Transcript Sidebar */}
                 {showChat && (
-                    <div className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+                    <div className="w-96 bg-gray-800 border-l border-gray-700 flex flex-col">
+                        {/* Tabs Header */}
                         <div className="p-4 border-b border-gray-700">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-semibold text-white">Meeting Chat</h3>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-semibold text-white">
+                                    {activeTab === 'chat' ? 'Meeting Chat' : 'Live Transcript'}
+                                </h3>
                                 <button
                                     onClick={() => setShowChat(false)}
                                     className="text-gray-400 hover:text-white"
@@ -970,58 +1176,110 @@ export default function MeetingRoomPage() {
                                     </svg>
                                 </button>
                             </div>
-                        </div>
 
-                        {/* Messages */}
-                        <div className="flex-1 p-4 overflow-y-auto space-y-3">
-                            {chatMessages.length === 0 ? (
-                                <p className="text-gray-500 text-sm text-center mt-8">No messages yet. Start the conversation!</p>
-                            ) : (
-                                chatMessages.map((msg) => {
-                                    const isOwnMessage = msg.sender === currentUserEmail || msg.sender === currentUserId;
-                                    return (
-                                        <div
-                                            key={msg.id}
-                                            className={`rounded-lg p-3 ${isOwnMessage
-                                                ? 'bg-blue-600/20 border border-blue-500/30'
-                                                : 'bg-gray-700'
-                                                }`}
-                                        >
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className={`text-sm font-semibold ${isOwnMessage ? 'text-blue-300' : 'text-blue-400'
-                                                    }`}>
-                                                    {isOwnMessage ? 'You' : msg.sender}
-                                                </span>
-                                                <span className="text-xs text-gray-400">{msg.timestamp}</span>
-                                            </div>
-                                            <p className="text-sm text-white">{msg.message}</p>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-
-                        {/* Input */}
-                        <div className="p-4 border-t border-gray-700">
+                            {/* Tab Buttons */}
                             <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    onKeyPress={handleChatKeyPress}
-                                    placeholder="Type a message..."
-                                    className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
                                 <button
-                                    onClick={handleSendMessage}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                    onClick={() => setActiveTab('chat')}
+                                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'chat'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        </svg>
+                                        Chat
+                                        {chatMessages.length > 0 && (
+                                            <span className="px-1.5 py-0.5 bg-blue-500/30 rounded text-xs">
+                                                {chatMessages.length}
+                                            </span>
+                                        )}
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('transcript')}
+                                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'transcript'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Transcript
+                                    </div>
                                 </button>
                             </div>
                         </div>
+
+                        {/* Tab Content */}
+                        {activeTab === 'chat' ? (
+                            <>
+                                {/* Chat Messages */}
+                                <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                                    {chatMessages.length === 0 ? (
+                                        <p className="text-gray-500 text-sm text-center mt-8">No messages yet. Start the conversation!</p>
+                                    ) : (
+                                        chatMessages.map((msg) => {
+                                            const isOwnMessage = msg.sender === currentUserEmail || msg.sender === currentUserId;
+                                            return (
+                                                <div
+                                                    key={msg.id}
+                                                    className={`rounded-lg p-3 ${isOwnMessage
+                                                        ? 'bg-blue-600/20 border border-blue-500/30'
+                                                        : 'bg-gray-700'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className={`text-sm font-semibold ${isOwnMessage ? 'text-blue-300' : 'text-blue-400'
+                                                            }`}>
+                                                            {isOwnMessage ? 'You' : msg.sender}
+                                                        </span>
+                                                        <span className="text-xs text-gray-400">{msg.timestamp}</span>
+                                                    </div>
+                                                    <p className="text-sm text-white">{msg.message}</p>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+
+                                {/* Chat Input */}
+                                <div className="p-4 border-t border-gray-700">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            onKeyPress={handleChatKeyPress}
+                                            placeholder="Type a message..."
+                                            className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <button
+                                            onClick={handleSendMessage}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            /* Transcript Viewer */
+                            <div className="flex-1 overflow-hidden">
+                                <TranscriptViewer
+                                    segments={transcriptSegments}
+                                    currentUserId={currentUserId}
+                                    isLive={true}
+                                    onExport={handleExportTranscript}
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
 

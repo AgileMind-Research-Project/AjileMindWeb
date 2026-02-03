@@ -193,4 +193,10 @@ export const meetingAPI = {
     getTranscript: async (meetingId: string) => {
         return fetchAPI(`/meetings/${meetingId}/transcripts`);
     },
+    /**
+     * Get all transcripts for a channel
+     */
+    getChannelTranscripts: async (channelId: string) => {
+        return fetchAPI(`/meetings/channels/${channelId}/transcripts`);
+    },
 };

@@ -7,10 +7,25 @@ import { io, Socket } from 'socket.io-client';
 
 // Dynamic Socket.IO URL - uses current hostname
 const getSocketURL = () => {
+    // Priority 1: Explicit WebSocket URL from environment
+    if (process.env.NEXT_PUBLIC_WS_URL) {
+        return process.env.NEXT_PUBLIC_WS_URL;
+    }
+
+    // Priority 2: Infer from API Base URL
+    if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+        try {
+            const url = new URL(process.env.NEXT_PUBLIC_API_BASE_URL);
+            // Always return the origin (protocol + host + port), stripping any path like /api/v1
+            // socket.io-client handles http->ws upgrade automatically
+            return url.origin;
+        } catch (e) {
+            console.warn('⚠️ Invalid NEXT_PUBLIC_API_BASE_URL, falling back to window location');
+        }
+    }
+
     if (typeof window !== 'undefined') {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const hostname = window.location.hostname;
-        return `${window.location.protocol}//${hostname}:8000`;
+        return window.location.origin;
     }
     return 'http://localhost:8000';
 };
@@ -53,7 +68,7 @@ class SocketClient {
     private socket: Socket | null = null;
     private meetingId: string | null = null;
 
-    connect(meetingId: string, userId: string, username: string): Socket {
+    connect(meetingId: string, userId: string, username: string, role?: string, email?: string): Socket {
         if (this.socket?.connected) {
             console.log('⚠️ Socket already connected');
             return this.socket;
@@ -63,10 +78,14 @@ class SocketClient {
 
         this.socket = io(SOCKET_URL, {
             path: '/socket.io/',
-            transports: ['polling', 'websocket'],
+            transports: ['websocket', 'polling'], // Prefer WebSocket, fallback to polling
             reconnection: true,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: 50,
             reconnectionDelay: 1000,
+            timeout: 20000,
+            auth: {
+                token: typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+            }
         });
 
         this.meetingId = meetingId;
@@ -81,6 +100,8 @@ class SocketClient {
                 meeting_id: meetingId,
                 user_id: userId,
                 username: username,
+                role: role || 'Participant',
+                email: email || '',
             });
 
             console.log(`📍 Joining meeting room: ${meetingId} as ${username} (${userId})`);
@@ -155,6 +176,17 @@ class SocketClient {
         // Only log when starting to speak (reduces console noise)
         if (speaking) {
             console.log('🗣️ Speaking status:', speaking);
+        }
+    }
+
+    sendTranscriptSegment(text: string, isFinal: boolean) {
+        if (this.socket) {
+            this.socket.emit('transcript_segment', {
+                text,
+                is_final: isFinal,
+                timestamp: new Date().toISOString()
+            });
+            console.log('📝 Sent transcript segment:', isFinal ? '(Final)' : '(Interim)', text.substring(0, 30));
         }
     }
 

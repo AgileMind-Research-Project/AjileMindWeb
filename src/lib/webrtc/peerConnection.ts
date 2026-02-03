@@ -15,31 +15,14 @@ const ICE_SERVERS: RTCConfiguration = {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
-        // Additional public STUN servers
+
+        // Other Reliable Public STUN
         { urls: 'stun:stun.stunprotocol.org:3478' },
-        // Free public TURN servers (for testing - use your own for production)
-        // Metered TURN servers
-        {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-        },
-        // Twilio's free TURN for testing (may have limits)
-        {
-            urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-            username: '08d5c0e0c5e4e5e0f5c5e0d5c0e5f5e5',
-            credential: 'test',
-        },
+        { urls: 'stun:stun.framasoft.org:3478' },
+        { urls: 'stun:stun.voipbuster.com:3478' },
+        { urls: 'stun:stun.voipstunt.com:3478' },
+        // Port 443 STUN often bypasses firewalls
+        { urls: 'stun:stun.nextcloud.com:443' },
     ],
     // Enable ICE trickling for faster connection
     iceCandidatePoolSize: 10,
@@ -171,8 +154,16 @@ export async function handleAnswer(
     pc: RTCPeerConnection,
     answer: RTCSessionDescriptionInit
 ): Promise<void> {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('📥 Set remote answer');
+    if (pc.signalingState === 'have-local-offer') {
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log('📥 Set remote answer');
+        } catch (e) {
+            console.error('❌ Failed to set remote answer:', e);
+        }
+    } else {
+        console.warn(`⚠️ Cannot set remote answer in state: ${pc.signalingState}`);
+    }
 }
 
 /**
@@ -183,8 +174,10 @@ export async function addIceCandidate(
     candidate: RTCIceCandidateInit
 ): Promise<void> {
     try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        console.log('🧊 Added ICE candidate');
+        if (pc.remoteDescription && pc.signalingState !== 'closed') {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log('🧊 Added ICE candidate');
+        }
     } catch (error) {
         console.error('❌ Error adding ICE candidate:', error);
     }
