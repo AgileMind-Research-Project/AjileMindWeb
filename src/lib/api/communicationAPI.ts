@@ -4,7 +4,9 @@
  * API client for communication endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+import { API_CONFIG } from '@/lib/config/api.config';
+
+const API_BASE_URL = `${API_CONFIG.baseURL}/api/v1`;
 
 const getAuthToken = () => {
     if (typeof window !== 'undefined') {

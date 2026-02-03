@@ -4,8 +4,29 @@
  * Centralized API configuration for all HTTP requests
  */
 
+const getApiBaseUrl = () => {
+  // Priority 1: Environment variable (works on both client and server if prefixed with NEXT_PUBLIC_)
+  // We explicitly check for 'http://localhost:8000' to allow the dynamic fallback below to work for local dev
+  // if the env var isn't customized.
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (envUrl && envUrl !== 'http://localhost:8000') {
+    return envUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    // Client-side fallback: use current hostname with port 8000
+    // This is useful for local development across devices (e.g. testing on mobile via LAN IP)
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:8000`;
+  }
+
+  // Server-side fallback
+  return 'http://localhost:8000';
+};
+
 export const API_CONFIG = {
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000',
+  baseURL: getApiBaseUrl(),
   version: process.env.NEXT_PUBLIC_API_VERSION || 'v1',
   timeout: 180000, // 3 minutes - increased for large file uploads (backlog)
 };

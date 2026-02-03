@@ -10,7 +10,7 @@ import { API_CONFIG, getApiUrl } from '@/lib/config/api.config';
 // Helper to get auth state from Zustand persist storage
 const getAuthFromStorage = () => {
   if (typeof window === 'undefined') return null;
-  
+
   try {
     const authStorage = localStorage.getItem('auth-storage');
     if (authStorage) {
@@ -44,16 +44,16 @@ class HttpClient {
       (config) => {
         if (typeof window !== 'undefined') {
           const authState = getAuthFromStorage();
-          
+
           if (authState?.accessToken) {
             config.headers.Authorization = `Bearer ${authState.accessToken}`;
           }
-          
+
           if (authState?.tenant?.tenant_id) {
             config.headers['X-Tenant-ID'] = authState.tenant.tenant_id;
           }
         }
-        
+
         return config;
       },
       (error) => {
@@ -74,7 +74,7 @@ class HttpClient {
           try {
             const authState = getAuthFromStorage();
             const refreshToken = authState?.refreshToken;
-            
+
             if (refreshToken) {
               const response = await axios.post(
                 getApiUrl('/auth/refresh'),
@@ -82,7 +82,7 @@ class HttpClient {
               );
 
               const { access_token } = response.data.data;
-              
+
               // Update token in storage
               if (typeof window !== 'undefined') {
                 const authStorage = localStorage.getItem('auth-storage');
@@ -99,7 +99,7 @@ class HttpClient {
               if (originalRequest.headers) {
                 originalRequest.headers.Authorization = `Bearer ${access_token}`;
               }
-              
+
               return this.instance(originalRequest);
             }
           } catch (refreshError) {
