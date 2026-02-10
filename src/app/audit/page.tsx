@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as auditApi from '@/lib/api/audit.api';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface AuditLog {
   log_id: string;
@@ -60,7 +61,7 @@ export default function AuditLogsPage() {
   useEffect(() => {
     if (!hasHydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
-    if (user?.role !== 'SUPER_ADMIN') { 
+    if (!user?.roles?.includes('SUPER_ADMIN')) { 
       toast.error('Access denied. Super Admin only.');
       router.push('/dashboard');
       return;
@@ -221,30 +222,22 @@ export default function AuditLogsPage() {
   if (!hasHydrated || loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button onClick={() => router.push('/dashboard')} className="text-gray-600 hover:text-gray-900">
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
-                <p className="text-sm text-gray-600">Monitor system activity and security events</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50">
-                <Filter className="w-5 h-5" />
-                Filters
-              </button>
-              <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50">
-                <SettingsIcon className="w-5 h-5" />
-                Settings
-              </button>
-            </div>
+    <DashboardLayout>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
+            <p className="text-sm text-gray-600">Monitor system activity and security events</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <Filter className="w-5 h-5" />
+              Filters
+            </button>
+            <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <SettingsIcon className="w-5 h-5" />
+              Settings
+            </button>
           </div>
         </div>
       </div>
@@ -252,7 +245,7 @@ export default function AuditLogsPage() {
       {/* Settings Status Bar */}
       {settings && (
         <div className={`border-b ${loggingEnabled ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className="container mx-auto px-6 py-2">
+          <div className="px-6 py-2">
             <div className="flex items-center justify-between text-sm">
               <span className={loggingEnabled ? 'text-green-700' : 'text-red-700'}>
                 {loggingEnabled ? '✓ Audit Logging Enabled' : '✗ Audit Logging Disabled'} • Retention: {retentionDays} days
@@ -268,7 +261,7 @@ export default function AuditLogsPage() {
       {/* Filters Panel */}
       {showFilters && (
         <div className="bg-white border-b">
-          <div className="container mx-auto px-6 py-4">
+          <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Event Type</label>
@@ -325,7 +318,7 @@ export default function AuditLogsPage() {
         </div>
       )}
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="py-8">
         {/* Actions Bar */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -519,6 +512,6 @@ export default function AuditLogsPage() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

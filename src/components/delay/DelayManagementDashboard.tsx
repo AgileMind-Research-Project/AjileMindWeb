@@ -165,8 +165,9 @@ export default function DelayManagementDashboard() {
             }
 
             if (response.ok) {
-                const data = await response.json();
-                setDelayData(data);
+                const result = await response.json();
+                // Extract the actual delay data from the nested 'data' property
+                setDelayData(result.data);
             } else {
                 const errorData = await response.json();
                 setError(errorData.detail || 'Failed to fetch delay analysis');
@@ -287,7 +288,7 @@ export default function DelayManagementDashboard() {
                                 </p>
                                 {delayData.delay_days > 0 && (
                                     <p className="text-xs text-red-500 mt-1">
-                                        +{delayData.delay_days.toFixed(1)} days delay
+                                        +{(delayData.delay_days ?? 0).toFixed(1)} days delay
                                     </p>
                                 )}
                             </div>
@@ -305,7 +306,7 @@ export default function DelayManagementDashboard() {
                             <div>
                                 <p className="text-white/80 text-sm font-medium">Risk Level</p>
                                 <p className="text-3xl font-bold mt-2">{delayData.risk_level}</p>
-                                <p className="text-white/80 text-xs mt-1">{delayData.delay_percentage.toFixed(1)}% delay</p>
+                                <p className="text-white/80 text-xs mt-1">{(delayData.delay_percentage ?? 0).toFixed(1)}% delay</p>
                             </div>
                             <div className="text-5xl opacity-50">{getRiskIcon(delayData.risk_level)}</div>
                         </div>
@@ -316,10 +317,10 @@ export default function DelayManagementDashboard() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-blue-100 text-sm font-medium">Sprint Progress</p>
-                                <p className="text-3xl font-bold mt-2">{delayData.completed_sprints}/{delayData.planned_total_sprints.toFixed(0)}</p>
+                                <p className="text-3xl font-bold mt-2">{delayData.completed_sprints ?? 0}/{(delayData.planned_total_sprints ?? 0).toFixed(0)}</p>
                                 <p className="text-blue-100 text-xs mt-1">
-                                    {delayData.planned_total_sprints > 0
-                                        ? ((delayData.completed_sprints / delayData.planned_total_sprints) * 100).toFixed(1)
+                                    {(delayData.planned_total_sprints ?? 0) > 0
+                                        ? (((delayData.completed_sprints ?? 0) / (delayData.planned_total_sprints ?? 1)) * 100).toFixed(1)
                                         : 0}% complete
                                 </p>
                             </div>
@@ -334,8 +335,8 @@ export default function DelayManagementDashboard() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-purple-100 text-sm font-medium">Story Points</p>
-                                <p className="text-3xl font-bold mt-2">{delayData.completed_story_points}/{delayData.total_story_points}</p>
-                                <p className="text-purple-100 text-xs mt-1">{delayData.story_point_completion_rate.toFixed(1)}% complete</p>
+                                <p className="text-3xl font-bold mt-2">{delayData.completed_story_points ?? 0}/{delayData.total_story_points ?? 0}</p>
+                                <p className="text-purple-100 text-xs mt-1">{(delayData.story_point_completion_rate ?? 0).toFixed(1)}% complete</p>
                             </div>
                             <svg className="w-12 h-12 text-purple-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -348,9 +349,9 @@ export default function DelayManagementDashboard() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-teal-100 text-sm font-medium">Velocity</p>
-                                <p className="text-3xl font-bold mt-2">{delayData.actual_velocity.toFixed(1)}</p>
-                                <p className={`text-xs mt-1 ${delayData.velocity_variance >= 0 ? 'text-teal-100' : 'text-red-200'}`}>
-                                    {delayData.velocity_variance >= 0 ? '+' : ''}{delayData.velocity_variance.toFixed(1)} vs expected
+                                <p className="text-3xl font-bold mt-2">{(delayData.actual_velocity ?? 0).toFixed(1)}</p>
+                                <p className={`text-xs mt-1 ${(delayData.velocity_variance ?? 0) >= 0 ? 'text-teal-100' : 'text-red-200'}`}>
+                                    {(delayData.velocity_variance ?? 0) >= 0 ? '+' : ''}{(delayData.velocity_variance ?? 0).toFixed(1)} vs expected
                                 </p>
                             </div>
                             <svg className="w-12 h-12 text-teal-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,15 +376,15 @@ export default function DelayManagementDashboard() {
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Availability Ratio:</span>
-                                <span className="font-semibold text-gray-900">{(delayData.availability_ratio * 100).toFixed(1)}%</span>
+                                <span className="font-semibold text-gray-900">{((delayData.availability_ratio ?? 0) * 100).toFixed(1)}%</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Total Leave Hours:</span>
-                                <span className="font-semibold text-gray-900">{delayData.total_leave_hours}h</span>
+                                <span className="font-semibold text-gray-900">{delayData.total_leave_hours ?? 0}h</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Planned Hours:</span>
-                                <span className="font-semibold text-gray-900">{delayData.total_planned_hours}h</span>
+                                <span className="font-semibold text-gray-900">{delayData.total_planned_hours ?? 0}h</span>
                             </div>
                         </div>
                     </div>
@@ -399,15 +400,15 @@ export default function DelayManagementDashboard() {
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Total Duration:</span>
-                                <span className="font-semibold text-gray-900">{delayData.project_duration_days} days</span>
+                                <span className="font-semibold text-gray-900">{delayData.project_duration_days ?? 0} days</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Sprint Size:</span>
-                                <span className="font-semibold text-gray-900">{delayData.sprint_size_days} days ({delayData.sprint_size_weeks}w)</span>
+                                <span className="font-semibold text-gray-900">{delayData.sprint_size_days ?? 0} days ({delayData.sprint_size_weeks ?? 0}w)</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Days Elapsed:</span>
-                                <span className="font-semibold text-gray-900">{delayData.days_elapsed} days</span>
+                                <span className="font-semibold text-gray-900">{delayData.days_elapsed ?? 0} days</span>
                             </div>
                         </div>
                     </div>
@@ -423,15 +424,15 @@ export default function DelayManagementDashboard() {
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Remaining Points:</span>
-                                <span className="font-semibold text-gray-900">{delayData.remaining_story_points}</span>
+                                <span className="font-semibold text-gray-900">{delayData.remaining_story_points ?? 0}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Sprint Delay:</span>
-                                <span className="font-semibold text-red-600">{delayData.sprint_delay.toFixed(1)} sprints</span>
+                                <span className="font-semibold text-red-600">{(delayData.sprint_delay ?? 0).toFixed(1)} sprints</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Expected by Now:</span>
-                                <span className="font-semibold text-gray-900">{delayData.expected_sprints_by_now.toFixed(1)} sprints</span>
+                                <span className="font-semibold text-gray-900">{(delayData.expected_sprints_by_now ?? 0).toFixed(1)} sprints</span>
                             </div>
                         </div>
                     </div>
@@ -500,11 +501,11 @@ export default function DelayManagementDashboard() {
                                                             style={{ width: `${Math.min(sprint.completion_rate, 100)}%` }}
                                                         />
                                                     </div>
-                                                    <span className="text-xs font-semibold text-gray-700">{sprint.completion_rate.toFixed(0)}%</span>
+                                                    <span className="text-xs font-semibold text-gray-700">{(sprint.completion_rate ?? 0).toFixed(0)}%</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{sprint.velocity.toFixed(1)}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">{sprint.availability.toFixed(1)}%</td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{(sprint.velocity ?? 0).toFixed(1)}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">{(sprint.availability ?? 0).toFixed(1)}%</td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -14,6 +14,7 @@ import { authApi } from '@/lib/api/auth.api';
 import * as rolesApi from '@/lib/api/roles.api';
 import { UserPlus, ArrowLeft, Mail, Shield, Trash2, Edit, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function UsersListPage() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function UsersListPage() {
     }
 
     // Check if user has permission
-    if (currentUser?.role !== 'SUPER_ADMIN' && currentUser?.role !== 'ADMIN') {
+    if (!currentUser?.roles?.includes('SUPER_ADMIN') && !currentUser?.roles?.includes('ADMIN')) {
       toast.error('You do not have permission to access this page');
       router.push('/dashboard');
       return;
@@ -139,30 +140,17 @@ export default function UsersListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <h1 className="text-2xl font-bold text-blue-600">User Management</h1>
-            </div>
-            <button
-              onClick={() => router.push('/users/invite')}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <UserPlus className="w-5 h-5" />
-              Invite User
-            </button>
-          </div>
-        </div>
-      </nav>
+    <DashboardLayout>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+        <button
+          onClick={() => router.push('/users/invite')}
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <UserPlus className="w-5 h-5" />
+          Invite User
+        </button>
+      </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
@@ -219,10 +207,21 @@ export default function UsersListPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
-                        <Shield className="w-3 h-3" />
-                        {user.role}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {user.roles && user.roles.length > 0 ? (
+                          user.roles.map((role: string) => (
+                            <span key={role} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(role)}`}>
+                              <Shield className="w-3 h-3" />
+                              {role}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <Shield className="w-3 h-3" />
+                            No roles
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(user.status)}`}>
@@ -236,21 +235,31 @@ export default function UsersListPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openRoleModal(user)}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Change role"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => router.push(`/users/${user.user_id}`)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit user"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        {user.user_id !== currentUser?.user_id && (
+                        {/* Check if user has SUPER_ADMIN role */}
+                        {user.roles && user.roles.includes('SUPER_ADMIN') ? (
+                          <div className="flex items-center gap-1 text-xs text-gray-500 italic">
+                            <Shield className="w-3 h-3" />
+                            Protected
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => openRoleModal(user)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Change role"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => router.push(`/users/${user.user_id}`)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Edit user"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {user.user_id !== currentUser?.user_id && !user.roles?.includes('SUPER_ADMIN') && (
                           <button
                             onClick={() => handleDeleteUser(user.user_id, user.email)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -333,6 +342,6 @@ export default function UsersListPage() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

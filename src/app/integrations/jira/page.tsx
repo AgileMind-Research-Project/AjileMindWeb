@@ -55,7 +55,7 @@ export default function JiraIntegrationPage() {
       router.push('/login');
     } else if (passwordChangeRequired) {
       router.push('/auth/change-password');
-    } else if (user?.role !== 'SUPER_ADMIN' && user?.role !== 'ADMIN') {
+    } else if (!user?.roles?.includes('SUPER_ADMIN') && !user?.roles?.includes('ADMIN')) {
       router.push('/dashboard');
     } else {
       loadJiraStatus();

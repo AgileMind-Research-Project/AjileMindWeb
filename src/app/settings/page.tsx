@@ -9,6 +9,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useIsAuthenticated, useHasHydrated } from '@/lib/store/auth.store';
+import DocumentUpload from '@/components/ai/DocumentUpload';
 import { 
   ArrowLeft, 
   Lock, 
@@ -18,6 +19,7 @@ import {
   Shield,
   ChevronRight 
 } from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -105,25 +107,10 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-                <p className="text-sm text-gray-600">Manage your account and preferences</p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <DashboardLayout>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-sm text-gray-600">Manage your account and preferences</p>
       </div>
 
       {/* Content */}
@@ -143,11 +130,25 @@ export default function SettingsPage() {
                   }
                 </h2>
                 <p className="text-gray-600">{user?.email}</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Role: <span className="font-medium">{user?.role}</span>
-                </p>
+                <div className="flex gap-2 mt-1">
+                  {user?.roles && user.roles.length > 0 ? (
+                    user.roles.map((role: string) => (
+                      <span key={role} className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                        {role}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-500">No role assigned</span>
+                  )}
+                </div>
               </div>
             </div>
+          </div>
+
+          {/* Document Upload Section */}
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Document Management</h2>
+            <DocumentUpload />
           </div>
 
           {/* Settings Groups */}
@@ -202,6 +203,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

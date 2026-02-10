@@ -114,20 +114,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setActiveChannelId: (channelId) => set({ activeChannelId: channelId }),
 
     setMessages: (channelId, messages) =>
-        set((state) => ({
-            messages: {
-                ...state.messages,
-                [channelId]: messages,
-            },
-        })),
+        set((state) => {
+            // Deduplicate messages based on ID
+            const uniqueMessages = Array.from(
+                new Map(messages.map((m) => [m.id, m])).values()
+            );
+            return {
+                messages: {
+                    ...state.messages,
+                    [channelId]: uniqueMessages,
+                },
+            };
+        }),
 
     addMessage: (channelId, message) =>
-        set((state) => ({
-            messages: {
-                ...state.messages,
-                [channelId]: [...(state.messages[channelId] || []), message],
-            },
-        })),
+        set((state) => {
+            const currentMessages = state.messages[channelId] || [];
+            if (currentMessages.some((m) => m.id === message.id)) {
+                return state;
+            }
+            return {
+                messages: {
+                    ...state.messages,
+                    [channelId]: [...currentMessages, message],
+                },
+            };
+        }),
 
     updateMessage: (channelId, messageId, updates) =>
         set((state) => ({
@@ -148,12 +160,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         })),
 
     prependMessages: (channelId, messages) =>
-        set((state) => ({
-            messages: {
-                ...state.messages,
-                [channelId]: [...messages, ...(state.messages[channelId] || [])],
-            },
-        })),
+        set((state) => {
+            const currentMessages = state.messages[channelId] || [];
+            const newMessages = messages.filter(
+                (newMsg) => !currentMessages.some((currMsg) => currMsg.id === newMsg.id)
+            );
+
+            if (newMessages.length === 0) return state;
+
+            return {
+                messages: {
+                    ...state.messages,
+                    [channelId]: [...newMessages, ...currentMessages],
+                },
+            };
+        }),
 
     setTypingUsers: (channelId, userIds) =>
         set((state) => ({
