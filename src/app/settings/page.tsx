@@ -130,9 +130,17 @@ export default function SettingsPage() {
                   }
                 </h2>
                 <p className="text-gray-600">{user?.email}</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Role: <span className="font-medium">{user?.role}</span>
-                </p>
+                <div className="flex gap-2 mt-1">
+                  {user?.roles && user.roles.length > 0 ? (
+                    user.roles.map((role: string) => (
+                      <span key={role} className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                        {role}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-500">No role assigned</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -26,6 +26,7 @@ export interface TenantRegisterResponse {
       first_name: string | null;
       last_name: string | null;
       role: string;
+      roles?: string[]; // Support multiple roles
     };
     tokens: {
       access_token: string;
@@ -52,6 +53,7 @@ export interface LoginResponse {
       first_name: string | null;
       last_name: string | null;
       role: string;
+      roles?: string[]; // Support multiple roles
       tenant_id: string;
       tenant_name: string | null;
     };
@@ -85,7 +87,7 @@ export interface InviteUserRequest {
   first_name: string;
   last_name: string;
   email: string;
-  role: string;
+  roles: string[];
   project_ids?: number[];
 }
 
@@ -173,6 +175,11 @@ export const authApi = {
   // Roles
   listRoles: async (): Promise<any> => {
     return httpClient.get(API_ENDPOINTS.LIST_ROLES);
+  },
+
+  // Get assignable roles (filters SUPER_ADMIN for non-superadmins)
+  listAssignableRoles: async (): Promise<any> => {
+    return httpClient.get(`${API_ENDPOINTS.LIST_ROLES}/assignable`);
   },
 
   createRole: async (data: any): Promise<any> => {

@@ -10,7 +10,8 @@ interface DashboardLayoutProps {
   mainClassName?: string;
 }
 
-export default function DashboardLayout({ children, mainClassName }: DashboardLayoutProps) {
+
+export default function DashboardLayout({ children, mainClassName }: Readonly<DashboardLayoutProps>) {
   const { logout } = useAuth();
   const user = useUser();
   const tenant = useTenant();
@@ -34,7 +35,17 @@ export default function DashboardLayout({ children, mainClassName }: DashboardLa
                     ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
                     : user?.email}
                 </p>
-                <p className="text-gray-500">{user?.role}</p>
+                <div className="flex gap-1 justify-end">
+                  {user?.roles && user.roles.length > 0 ? (
+                    user.roles.map((role: string, index: number) => (
+                      <span key={role} className="text-gray-500">
+                        {role}{index < (user.roles?.length ?? 0) - 1 ? ',' : ''}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-gray-500">{user?.role}</p>
+                  )}
+                </div>
               </div>
               <button
                 onClick={logout}
@@ -55,10 +66,11 @@ export default function DashboardLayout({ children, mainClassName }: DashboardLa
         <Sidebar />
 
         {/* Main Content */}
-        <main className={`flex-1 ml-64 ${mainClassName || 'p-8'}`}>
+
+        <main className={`flex-1 ml-64 p-8 ${mainClassName || ''}`}>
           {children}
         </main>
       </div>
-    </div>
+    </div >
   );
 }
