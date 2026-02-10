@@ -60,7 +60,7 @@ export default function AuditLogsPage() {
   useEffect(() => {
     if (!hasHydrated) return;
     if (!isAuthenticated) { router.push('/login'); return; }
-    if (user?.role !== 'SUPER_ADMIN') { 
+    if (!user?.roles?.includes('SUPER_ADMIN')) { 
       toast.error('Access denied. Super Admin only.');
       router.push('/dashboard');
       return;

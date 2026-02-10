@@ -12,7 +12,8 @@ export interface User {
     email: string;
     first_name: string;
     last_name: string;
-    role: string;
+    role: string; // Legacy field for backward compatibility
+    roles?: string[]; // New field for multiple roles
     tenant_name?: string;
     created_at?: string;
 }

@@ -12,13 +12,13 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useUser } from '@/lib/store/auth.store';
 import { authApi } from '@/lib/api/auth.api';
 import { projectsApi } from '@/lib/api/projects.api';
-import { User, Mail, Shield, ArrowLeft, Briefcase, Save } from 'lucide-react';
+import { User, Mail, Shield, Briefcase, Save, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function EditUserPage() {
     const router = useRouter();
     const params = useParams();
-    const userId = params.userId as string;
+    const userId = params?.userId as string;
     const { isAuthenticated } = useAuth();
     const currentUser = useUser();
 
@@ -32,8 +32,13 @@ export default function EditUserPage() {
         first_name: '',
         last_name: '',
         email: '',
-        role: '',
+        roles: [] as string[],
         project_ids: [] as number[],
+        user_data: {
+            stack: [] as string[],
+            technologies: [] as string[],
+            experience_years: 0,
+        },
     });
 
     useEffect(() => {
@@ -42,7 +47,7 @@ export default function EditUserPage() {
             return;
         }
 
-        if (currentUser?.role !== 'SUPER_ADMIN' && currentUser?.role !== 'ADMIN') {
+        if (!currentUser?.roles?.includes('SUPER_ADMIN') && !currentUser?.roles?.includes('ADMIN')) {
             toast.error('You do not have permission to access this page');
             router.push('/dashboard');
             return;
@@ -69,7 +74,7 @@ export default function EditUserPage() {
 
             // Fetch roles and projects in parallel
             const [rolesResponse, projectsResponse] = await Promise.all([
-                authApi.listRoles(),
+                authApi.listAssignableRoles(),
                 projectsApi.listProjects()
             ]);
 
@@ -84,8 +89,13 @@ export default function EditUserPage() {
                 first_name: user.first_name || '',
                 last_name: user.last_name || '',
                 email: user.email || '',
-                role: user.role || '',
+                roles: user.roles || [],
                 project_ids: user.project_ids || [],
+                user_data: {
+                    stack: user.user_data?.stack || [],
+                    technologies: user.user_data?.technologies || [],
+                    experience_years: user.user_data?.experience_years || 0,
+                },
             });
         } catch (error: any) {
             console.error('Failed to fetch data:', error);
@@ -116,14 +126,19 @@ export default function EditUserPage() {
         setSaving(true);
 
         try {
-            // Update user basic details (name, role)
+            // Check if user_data has changed
+            const userDataChanged = JSON.stringify(formData.user_data) !== JSON.stringify(userData.user_data || { stack: [], technologies: [], experience_years: 0 });
+
+            // Update user basic details (name, roles, user_data)
             if (formData.first_name !== userData.first_name ||
                 formData.last_name !== userData.last_name ||
-                formData.role !== userData.role) {
+                JSON.stringify(formData.roles) !== JSON.stringify(userData.roles) ||
+                userDataChanged) {
                 await authApi.updateUser(userId, {
                     first_name: formData.first_name,
                     last_name: formData.last_name,
-                    role: formData.role,
+                    roles: formData.roles,
+                    user_data: formData.user_data,
                 });
             }
 
@@ -268,28 +283,200 @@ export default function EditUserPage() {
                                 <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
                             </div>
 
-                            {/* Role */}
+                            {/* Roles - Multi-Select */}
                             <div>
-                                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-                                    Role
+                                <label htmlFor="roles" className="block text-sm font-medium text-gray-700 mb-2">
+                                    Roles *
+                                    {userData?.roles?.includes('SUPER_ADMIN') && (
+                                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                            Protected
+                                        </span>
+                                    )}
                                 </label>
-                                <div className="relative">
-                                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                    <select
-                                        id="role"
-                                        name="role"
-                                        value={formData.role}
-                                        onChange={handleChange}
-                                        required
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-                                    >
-                                        <option value="">Select a role</option>
-                                        {roles.map((role) => (
-                                            <option key={role.role_name} value={role.role_name}>
-                                                {role.role_name} - {role.description}
-                                            </option>
+                                {/* Check if user has SUPER_ADMIN role - if so, disable editing */}
+                                {userData?.roles?.includes('SUPER_ADMIN') ? (
+                                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                        <p className="text-sm text-purple-800">
+                                            <strong>Super Admin users</strong> cannot have their roles modified for security reasons.
+                                        </p>
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {userData.roles.map((roleName: string) => (
+                                                <span
+                                                    key={roleName}
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-full"
+                                                >
+                                                    <Shield className="w-4 h-4" />
+                                                    {roleName}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="relative">
+                                            <Shield className="absolute left-3 top-4 text-gray-400 w-5 h-5 pointer-events-none z-10" />
+                                            <select
+                                                id="roles"
+                                                name="roles"
+                                                multiple
+                                                size={Math.min(roles.length, 5)}
+                                                value={formData.roles}
+                                                onChange={(e) => {
+                                                    const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+                                                    setFormData({ ...formData, roles: selectedOptions });
+                                                }}
+                                                required
+                                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent overflow-y-auto"
+                                                style={{ minHeight: '120px', backgroundImage: 'none' }}
+                                            >
+                                                {roles.map((role) => (
+                                                    <option key={role.role_name} value={role.role_name} className="py-2 px-2 hover:bg-blue-50 cursor-pointer">
+                                                        {role.role_name} - {role.description}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="mt-2 space-y-1">
+                                            <p className="text-xs text-gray-500">
+                                                💡 Hold <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Ctrl</kbd> (Windows)
+                                                or <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Cmd</kbd> (Mac)
+                                                and click to select multiple roles
+                                            </p>
+                                            {formData.roles.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                                                    <span className="text-xs font-medium text-purple-800">Selected Roles:</span>
+                                                    {formData.roles.map((roleName) => {
+                                                        const role = roles.find(r => r.role_name === roleName);
+                                                        return role ? (
+                                                            <span
+                                                                key={roleName}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 text-white text-xs font-medium rounded-full"
+                                                            >
+                                                                {role.role_name}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setFormData({
+                                                                            ...formData,
+                                                                            roles: formData.roles.filter(r => r !== roleName)
+                                                                        });
+                                                                    }}
+                                                                    className="hover:bg-purple-700 rounded-full p-0.5"
+                                                                >
+                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                </button>
+                                                            </span>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* User Profile Data Section */}
+                            <div className="border-t pt-6 mt-6">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4">User Profile Information</h3>
+
+                                {/* Stack */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Technology Stack
+                                    </label>
+                                    <div className="space-y-2">
+                                        {['backend', 'frontend'].map((stackOption) => (
+                                            <label key={stackOption} className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.user_data.stack.includes(stackOption)}
+                                                    onChange={(e) => {
+                                                        const newStack = e.target.checked
+                                                            ? [...formData.user_data.stack, stackOption]
+                                                            : formData.user_data.stack.filter(s => s !== stackOption);
+                                                        setFormData({
+                                                            ...formData,
+                                                            user_data: { ...formData.user_data, stack: newStack }
+                                                        });
+                                                    }}
+                                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                />
+                                                <span className="ml-2 text-sm text-gray-700 capitalize">{stackOption}</span>
+                                            </label>
                                         ))}
-                                    </select>
+                                    </div>
+                                </div>
+
+                                {/* Technologies */}
+                                <div className="mb-6">
+                                    <label htmlFor="technologies" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Technologies/Frameworks
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="technologies"
+                                        value={formData.user_data.technologies.join(', ')}
+                                        placeholder="e.g., java, spring, mysql, react (comma-separated)"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        onChange={(e) => {
+                                            const techs = e.target.value.split(',').map(t => t.trim()).filter(t => t);
+                                            setFormData({
+                                                ...formData,
+                                                user_data: { ...formData.user_data, technologies: techs }
+                                            });
+                                        }}
+                                    />
+                                    {formData.user_data.technologies.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {formData.user_data.technologies.map((tech, idx) => (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full"
+                                                >
+                                                    {tech}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newTechs = formData.user_data.technologies.filter((_, i) => i !== idx);
+                                                            setFormData({
+                                                                ...formData,
+                                                                user_data: { ...formData.user_data, technologies: newTechs }
+                                                            });
+                                                        }}
+                                                        className="hover:bg-green-200 rounded-full p-0.5"
+                                                    >
+                                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Experience Years */}
+                                <div>
+                                    <label htmlFor="experience_years" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Years of Experience
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="experience_years"
+                                        min="0"
+                                        max="50"
+                                        value={formData.user_data.experience_years}
+                                        onChange={(e) => {
+                                            setFormData({
+                                                ...formData,
+                                                user_data: { ...formData.user_data, experience_years: parseInt(e.target.value) || 0 }
+                                            });
+                                        }}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder="0"
+                                    />
                                 </div>
                             </div>
 

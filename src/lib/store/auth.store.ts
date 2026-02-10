@@ -13,7 +13,8 @@ export interface User {
   email: string;
   first_name: string | null;
   last_name: string | null;
-  role: string;
+  role: string; // Legacy field for backward compatibility
+  roles?: string[]; // New field for multiple roles
   tenant_id: string;
   tenant_name: string | null;
   status?: string;
