@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Calendar, Tag, Edit, Trash2, FileBarChart, ChevronRight } from "lucide-react";
+import { FileText, Calendar, Tag, Edit, Trash2, FileBarChart, ChevronRight, Sparkles } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 import ReportGenerator from "../reports/ReportGenerator";
+import ParsedDataReviewModal from "../meetings/ParsedDataReviewModal";
 
 const API_BASE = 'http://localhost:8000';
 
@@ -40,19 +41,20 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
-  
+
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showParseModal, setShowParseModal] = useState(false);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
       router.push('/login');
       return;
     }
-    
+
     if (hasHydrated && accessToken) {
       fetchTranscript();
       fetchReports();
@@ -123,12 +125,14 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
   const getCategoryBadge = (category: string) => {
     const styles = {
       daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-      sprint_meeting: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
       retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
     };
 
     const labels = {
       daily_standup: "Daily Standup",
+      sprint_planning: "Sprint Planning",
       sprint_meeting: "Sprint Meeting",
       retrospective: "Retrospective"
     };
@@ -189,7 +193,7 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
                   </h1>
                   {getCategoryBadge(transcript.category)}
                 </div>
-                
+
                 <div className="flex items-center gap-6 text-sm text-gray-500 dark:text-gray-400">
                   <span className="flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
@@ -227,6 +231,13 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
                 >
                   <FileBarChart className="w-4 h-4" />
                   Generate Report
+                </button>
+                <button
+                  onClick={() => setShowParseModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Parse with AI
                 </button>
                 <button
                   onClick={handleDelete}
@@ -310,6 +321,19 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
             setShowGenerateModal(false);
             fetchReports();
             router.push(`/reports/${reportId}`);
+          }}
+        />
+      )}
+
+      {/* Parse Data Modal */}
+      {showParseModal && (
+        <ParsedDataReviewModal
+          transcriptId={transcriptId}
+          projectId={(transcript as any).project_id}
+          onClose={() => setShowParseModal(false)}
+          onSyncComplete={() => {
+            setShowParseModal(false);
+            fetchReports(); // Refresh reports or other data if needed
           }}
         />
       )}

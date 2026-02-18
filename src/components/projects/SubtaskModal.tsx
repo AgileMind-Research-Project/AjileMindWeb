@@ -57,6 +57,16 @@ export default function SubtaskModal({
     const [selectedSubtasks, setSelectedSubtasks] = useState<Set<string>>(new Set());
     const [mergingSubtasks, setMergingSubtasks] = useState<string[]>([]);
 
+    // Adding Subtask State
+    const [addingToTask, setAddingToTask] = useState<string | null>(null);
+    const [newSubtaskForm, setNewSubtaskForm] = useState({
+        summary: '',
+        description: '',
+        priority: '',
+        assignee: '',
+        tags: ''
+    });
+
     useEffect(() => {
         if (isOpen) {
             fetchBacklog();
@@ -262,6 +272,52 @@ export default function SubtaskModal({
         } catch (error: any) {
             console.error('Error updating subtask:', error);
             ToastService.showError(error.message || 'Failed to update subtask');
+        }
+    };
+
+    const handleAddSubtaskClick = (taskId: string) => {
+        setAddingToTask(taskId);
+        setNewSubtaskForm({ summary: '', description: '', priority: '', assignee: '', tags: '' });
+        setMergingSubtasks([]);
+        setEditingSubtask(null);
+    };
+
+    const handleCreateSubtask = async () => {
+        if (!addingToTask || !newSubtaskForm.summary.trim()) return;
+
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+            const tagsArray = newSubtaskForm.tags.split(',').map(t => t.trim()).filter(t => t);
+
+            const response = await fetch(`${apiUrl}/api/v1/backlog/subtask`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    parent_item_id: addingToTask,
+                    summary: newSubtaskForm.summary,
+                    description: newSubtaskForm.description,
+                    priority: newSubtaskForm.priority || null,
+                    assignee: newSubtaskForm.assignee || null,
+                    tags: tagsArray
+                })
+            });
+
+            if (response.ok) {
+                ToastService.showSuccess('Subtask created successfully');
+                setAddingToTask(null);
+                fetchBacklog();
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to create subtask');
+            }
+        } catch (error: any) {
+            console.error('Error creating subtask:', error);
+            ToastService.showError(error.message || 'Failed to create subtask');
         }
     };
 
@@ -618,6 +674,86 @@ export default function SubtaskModal({
                                                         <div className="text-center py-6 text-gray-500 text-sm border-2 border-dashed border-gray-200 rounded">
                                                             No subtasks found for this item
                                                         </div>
+                                                    )}
+                                                    {addingToTask === task.id ? (
+                                                        <div className="mt-4 bg-white p-4 rounded border border-blue-200 shadow-sm animate-fadeIn">
+                                                            <h5 className="text-xs font-bold text-gray-500 uppercase mb-3">New Subtask</h5>
+                                                            <div className="space-y-3">
+                                                                <div>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Summary (Required)"
+                                                                        className="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2 border"
+                                                                        value={newSubtaskForm.summary}
+                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, summary: e.target.value })}
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <textarea
+                                                                        placeholder="Description"
+                                                                        className="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2 border"
+                                                                        rows={2}
+                                                                        value={newSubtaskForm.description}
+                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, description: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                                <div className="grid grid-cols-3 gap-3">
+                                                                    <select
+                                                                        className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2 border"
+                                                                        value={newSubtaskForm.priority}
+                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, priority: e.target.value })}
+                                                                    >
+                                                                        <option value="">Priority (Optional)</option>
+                                                                        <option value="high">High</option>
+                                                                        <option value="medium">Medium</option>
+                                                                        <option value="low">Low</option>
+                                                                    </select>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Assignee (Optional)"
+                                                                        className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2 border"
+                                                                        value={newSubtaskForm.assignee}
+                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, assignee: e.target.value })}
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Tags (comma separated)"
+                                                                        className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2 border"
+                                                                        value={newSubtaskForm.tags}
+                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, tags: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => setAddingToTask(null)}
+                                                                        className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleCreateSubtask}
+                                                                        disabled={!newSubtaskForm.summary.trim()}
+                                                                        className="px-3 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
+                                                                    >
+                                                                        Add Subtask
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleAddSubtaskClick(task.id);
+                                                            }}
+                                                            className="mt-4 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors w-full justify-center border border-dashed border-blue-200 py-2 rounded hover:bg-blue-50"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                            </svg>
+                                                            Add Subtask
+                                                        </button>
                                                     )}
                                                 </div>
                                             )}

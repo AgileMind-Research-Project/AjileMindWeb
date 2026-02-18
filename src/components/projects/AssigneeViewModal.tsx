@@ -81,9 +81,9 @@ export default function AssigneeViewModal({
                 }
             );
 
-            // 3. Fetch Users (Project Members)
+            // 3. Fetch All Users (then filter by project)
             const usersRes = await fetch(
-                `${apiUrl}/api/v1/projects/${projectId}/users`,
+                `${apiUrl}/api/v1/users`,
                 {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }
@@ -129,7 +129,6 @@ export default function AssigneeViewModal({
             }
 
             // Process Users
-            // Process Users
             if (usersRes.ok) {
                 const usersResponse = await usersRes.json();
                 let usersList: any[] = [];
@@ -138,7 +137,23 @@ export default function AssigneeViewModal({
                 } else if (Array.isArray(usersResponse.data)) {
                     usersList = usersResponse.data;
                 }
-                setUsers(usersList.filter((u: any) => u.status === 'ACTIVE'));
+
+                // Filter users who belong to this project
+                const projectUsers = usersList.filter((u: any) => {
+                    const isActive = u.status === 'ACTIVE';
+
+                    // Check if user is assigned to this project
+                    // Handle both string and number types in projects array
+                    // Backend returns 'project_ids', checking 'projects' as fallback
+                    const userProjects = u.project_ids || u.projects || [];
+                    const isInProject = Array.isArray(userProjects) && userProjects.some((p: any) =>
+                        String(p) === String(projectId)
+                    );
+
+                    return isActive && isInProject;
+                });
+
+                setUsers(projectUsers);
             }
 
         } catch (error) {
@@ -265,9 +280,63 @@ export default function AssigneeViewModal({
                                 Manage assignments and view hierarchy for <span className="font-semibold text-gray-900">{projectName}</span>
                             </p>
                         </div>
-                        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+                                        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+                                        ToastService.showInfo('Checking Jira status...');
+
+                                        // Check Jira Status
+                                        const statusRes = await fetch(`${apiUrl}/api/v1/jira/status`, {
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        });
+
+                                        if (statusRes.ok) {
+                                            const statusData = await statusRes.json();
+                                            if (statusData.data?.connected) {
+                                                ToastService.showInfo('Syncing with Jira...');
+
+                                                // Trigger Sync
+                                                const syncRes = await fetch(
+                                                    `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/prioritized-backlog/update-ranks`,
+                                                    {
+                                                        method: 'PUT',
+                                                        headers: {
+                                                            'Authorization': `Bearer ${token}`,
+                                                            'Content-Type': 'application/json'
+                                                        },
+                                                        body: JSON.stringify({ updates: [], sync_to_jira: true })
+                                                    }
+                                                );
+
+                                                if (syncRes.ok) {
+                                                    ToastService.showSuccess('Synced successfully! reloading...');
+                                                    setTimeout(() => window.location.reload(), 1500);
+                                                } else {
+                                                    throw new Error('Sync failed');
+                                                }
+                                            } else {
+                                                ToastService.showError('Jira not connected');
+                                            }
+                                        } else {
+                                            throw new Error('Failed to check status');
+                                        }
+                                    } catch (e) {
+                                        console.error('Sync error:', e);
+                                        ToastService.showError('Failed to sync to Jira');
+                                    }
+                                }}
+                                className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                            >
+                                <span>🔄</span> Sync to Jira
+                            </button>
+                            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Content */}

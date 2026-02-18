@@ -192,11 +192,28 @@ export default function PrioritizedBacklogModal({
             const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+            // Check Jira Status
+            let syncToJira = false;
+            try {
+                const statusRes = await fetch(`${apiUrl}/api/v1/jira/status`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (statusRes.ok) {
+                    const statusData = await statusRes.json();
+                    if (statusData.data?.connected) {
+                        syncToJira = true;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to check Jira status', e);
+            }
+
             const updates = prioritizedItems.map(item => ({
                 backlog_id: item.backlog_id,
                 new_rank: item.rank
             }));
 
+            // 1. Update Ranks (Don't sync here, we do it separate)
             const response = await fetch(
                 `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/prioritized-backlog/update-ranks`,
                 {
@@ -205,7 +222,7 @@ export default function PrioritizedBacklogModal({
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ updates })
+                    body: JSON.stringify({ updates, sync_to_jira: false })
                 }
             );
 
@@ -215,11 +232,10 @@ export default function PrioritizedBacklogModal({
 
             const data = await response.json();
             if (data.success) {
-                ToastService.showSuccess(`Successfully updated ${data.data.updated_count} item rank(s)!`);
+                const message = `Successfully updated ${data.data.updated_count} item rank(s)!`;
+                ToastService.showSuccess(message);
                 setHasChanges(false);
-                setTimeout(() => {
-                    onClose();
-                }, 1500);
+                onClose();
             }
         } catch (error) {
             console.error('Error updating ranks:', error);
@@ -428,10 +444,10 @@ export default function PrioritizedBacklogModal({
                             {activeTab === 'prioritized' && (
                                 <button
                                     onClick={handleConfirm}
-                                    disabled={!hasChanges || saving}
+                                    disabled={saving}
                                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
-                                    {saving ? 'Saving...' : 'Save Rankings'}
+                                    {saving ? 'Processing...' : 'Confirm'}
                                 </button>
                             )}
                         </div>

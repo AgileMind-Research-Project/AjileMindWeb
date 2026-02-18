@@ -15,6 +15,14 @@ interface Transcript {
   tags: string[] | null;
   file_name: string | null;
   created_at: string;
+  project_id?: number;
+  project_name?: string;
+}
+
+interface Project {
+  project_id: number;
+  project_name: string;
+  key: string;
 }
 
 interface TranscriptListResponse {
@@ -29,22 +37,25 @@ export default function TranscriptList() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
-  
+
   const [data, setData] = useState<TranscriptListResponse>({
     transcripts: [],
     total: 0,
     page: 1,
     page_size: 20
   });
-  
+
   const [filters, setFilters] = useState({
     category: "",
     dateFrom: "",
     dateTo: "",
     search: "",
-    page: 1
+    page: 1,
+    projectId: ""
   });
-  
+
+  const [projects, setProjects] = useState<Project[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -56,20 +67,39 @@ export default function TranscriptList() {
       router.push('/login');
       return;
     }
+    fetchProjects();
     fetchTranscripts();
   }, [filters, isAuthenticated, hasHydrated]);
+
+  const fetchProjects = async () => {
+    if (!accessToken) return;
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/projects`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          setProjects(result.data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch projects", error);
+    }
+  };
 
   const fetchTranscripts = async () => {
     if (!accessToken) {
       return;
     }
-    
+
     setLoading(true);
     setError("");
 
     try {
       const params = new URLSearchParams();
       if (filters.category) params.append("category", filters.category);
+      if (filters.projectId) params.append("project_id", filters.projectId);
       if (filters.dateFrom) params.append("date_from", filters.dateFrom);
       if (filters.dateTo) params.append("date_to", filters.dateTo);
       if (filters.search) params.append("search", filters.search);
@@ -122,12 +152,14 @@ export default function TranscriptList() {
   const getCategoryBadge = (category: string) => {
     const styles = {
       daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-      sprint_meeting: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
       retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
     };
 
     const labels = {
       daily_standup: "Daily Standup",
+      sprint_planning: "Sprint Planning",
       sprint_meeting: "Sprint Meeting",
       retrospective: "Retrospective"
     };
@@ -184,8 +216,25 @@ export default function TranscriptList() {
               >
                 <option value="">All Categories</option>
                 <option value="daily_standup">Daily Standup</option>
+                <option value="sprint_planning">Sprint Planning</option>
                 <option value="sprint_meeting">Sprint Meeting</option>
                 <option value="retrospective">Retrospective</option>
+              </select>
+            </div>
+
+            {/* Project Filter */}
+            <div>
+              <select
+                value={filters.projectId}
+                onChange={(e) => setFilters(prev => ({ ...prev, projectId: e.target.value, page: 1 }))}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">All Projects</option>
+                {projects.map((project) => (
+                  <option key={project.project_id} value={project.project_id}>
+                    {project.project_name} ({project.key})
+                  </option>
+                ))}
               </select>
             </div>
 

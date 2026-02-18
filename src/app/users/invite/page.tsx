@@ -16,6 +16,26 @@ import { User, Mail, Shield, Info, Briefcase, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
+// Technology options
+const BACKEND_TECHNOLOGIES = [
+  'Java', 'Spring Boot', 'Python', 'Django', 'Flask', 'FastAPI',
+  'Node.js', 'Express.js', 'NestJS',
+  '.NET', 'C#', 'ASP.NET',
+  'PHP', 'Laravel',
+  'Ruby', 'Ruby on Rails',
+  'Go', 'Rust',
+  'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'Oracle', 'SQL Server'
+];
+
+const FRONTEND_TECHNOLOGIES = [
+  'React', 'Next.js', 'Vue.js', 'Angular', 'Svelte',
+  'TypeScript', 'JavaScript',
+  'HTML', 'CSS', 'SCSS', 'Sass',
+  'Tailwind CSS', 'Bootstrap', 'Material-UI',
+  'Redux', 'Zustand', 'MobX', 'Pinia',
+  'Webpack', 'Vite', 'Rollup'
+];
+
 export default function InviteUserPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
@@ -32,7 +52,7 @@ export default function InviteUserPage() {
     roles: [] as string[],
     project_ids: [] as number[],
     user_data: {
-      stack: [] as string[],
+      stack: 'backend' as 'backend' | 'frontend' | 'both',
       technologies: [] as string[],
       experience_years: 0,
     },
@@ -288,77 +308,138 @@ export default function InviteUserPage() {
               <div className="border-t pt-6 mt-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">User Profile Information (Optional)</h3>
 
-                {/* Stack */}
+                {/* Stack - Radio Buttons */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
                     Technology Stack
                   </label>
                   <div className="space-y-2">
-                    {['backend', 'frontend'].map((stackOption) => (
-                      <label key={stackOption} className="flex items-center">
+                    {[
+                      { value: 'backend', label: 'Backend Only', description: 'Server-side development' },
+                      { value: 'frontend', label: 'Frontend Only', description: 'Client-side development' },
+                      { value: 'both', label: 'Both (Full Stack)', description: 'Backend + Frontend' }
+                    ].map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-all ${formData.user_data.stack === option.value
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
                         <input
-                          type="checkbox"
-                          checked={formData.user_data.stack.includes(stackOption)}
+                          type="radio"
+                          name="stack"
+                          value={option.value}
+                          checked={formData.user_data.stack === option.value}
                           onChange={(e) => {
-                            const newStack = e.target.checked
-                              ? [...formData.user_data.stack, stackOption]
-                              : formData.user_data.stack.filter(s => s !== stackOption);
                             setFormData({
                               ...formData,
-                              user_data: { ...formData.user_data, stack: newStack }
+                              user_data: {
+                                ...formData.user_data,
+                                stack: e.target.value as 'backend' | 'frontend' | 'both',
+                                // Clear technologies when stack changes
+                                technologies: []
+                              }
                             });
                           }}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                         />
-                        <span className="ml-2 text-sm text-gray-700 capitalize">{stackOption}</span>
+                        <div className="ml-3">
+                          <div className="font-medium text-gray-900">{option.label}</div>
+                          <div className="text-xs text-gray-500">{option.description}</div>
+                        </div>
                       </label>
                     ))}
                   </div>
                 </div>
 
-                {/* Technologies */}
+                {/* Technologies - Checkboxes based on stack */}
                 <div className="mb-6">
-                  <label htmlFor="technologies" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
                     Technologies/Frameworks
                   </label>
-                  <input
-                    type="text"
-                    id="technologies"
-                    placeholder="e.g., java, spring, mysql, react (comma-separated)"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    onChange={(e) => {
-                      const techs = e.target.value.split(',').map(t => t.trim()).filter(t => t);
-                      setFormData({
-                        ...formData,
-                        user_data: { ...formData.user_data, technologies: techs }
-                      });
-                    }}
-                  />
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto p-4 border border-gray-300 rounded-lg bg-gray-50">
+                    {(() => {
+                      let availableTechs: string[] = [];
+                      if (formData.user_data.stack === 'backend') {
+                        availableTechs = BACKEND_TECHNOLOGIES;
+                      } else if (formData.user_data.stack === 'frontend') {
+                        availableTechs = FRONTEND_TECHNOLOGIES;
+                      } else if (formData.user_data.stack === 'both') {
+                        availableTechs = [...BACKEND_TECHNOLOGIES, ...FRONTEND_TECHNOLOGIES];
+                      }
+
+                      return availableTechs.length > 0 ? (
+                        availableTechs.map((tech) => (
+                          <label key={tech} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={formData.user_data.technologies.includes(tech)}
+                              onChange={(e) => {
+                                const newTechs = e.target.checked
+                                  ? [...formData.user_data.technologies, tech]
+                                  : formData.user_data.technologies.filter(t => t !== tech);
+                                setFormData({
+                                  ...formData,
+                                  user_data: { ...formData.user_data, technologies: newTechs }
+                                });
+                              }}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{tech}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <p className="col-span-full text-sm text-gray-500 text-center py-4">
+                          Select a technology stack above to see available technologies
+                        </p>
+                      );
+                    })()}
+                  </div>
                   {formData.user_data.technologies.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {formData.user_data.technologies.map((tech, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full"
-                        >
-                          {tech}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newTechs = formData.user_data.technologies.filter((_, i) => i !== idx);
-                              setFormData({
-                                ...formData,
-                                user_data: { ...formData.user_data, technologies: newTechs }
-                              });
-                            }}
-                            className="hover:bg-green-200 rounded-full p-0.5"
-                          >
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                            </svg>
-                          </button>
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-700">
+                          Selected ({formData.user_data.technologies.length}):
                         </span>
-                      ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              user_data: { ...formData.user_data, technologies: [] }
+                            });
+                          }}
+                          className="text-xs text-red-600 hover:text-red-800 underline"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.user_data.technologies.map((tech) => (
+                          <span
+                            key={tech}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full"
+                          >
+                            {tech}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newTechs = formData.user_data.technologies.filter(t => t !== tech);
+                                setFormData({
+                                  ...formData,
+                                  user_data: { ...formData.user_data, technologies: newTechs }
+                                });
+                              }}
+                              className="hover:bg-blue-200 rounded-full p-0.5"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

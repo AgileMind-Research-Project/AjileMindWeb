@@ -11,7 +11,7 @@ export default function TranscriptUpload() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const accessToken = useAuthStore((state) => state.accessToken);
-  
+
   const [formData, setFormData] = useState({
     title: "",
     category: "daily_standup" as "daily_standup" | "sprint_meeting" | "retrospective",
@@ -19,7 +19,7 @@ export default function TranscriptUpload() {
     tags: [] as string[],
     pastedContent: "",
   });
-  
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newTag, setNewTag] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,16 +29,16 @@ export default function TranscriptUpload() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
+
       // Validate file type
       const validTypes = ['.txt', '.pdf', '.docx'];
       const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-      
+
       if (!validTypes.includes(fileExt)) {
         setError("Invalid file type. Please upload .txt, .pdf, or .docx files.");
         return;
       }
-      
+
       setSelectedFile(file);
       setError("");
     }
@@ -106,7 +106,7 @@ export default function TranscriptUpload() {
       }
 
       const result = await response.json();
-      
+
       // Redirect to transcript detail page
       router.push(`/transcripts/${result.id}`);
     } catch (err: any) {
@@ -147,8 +147,8 @@ export default function TranscriptUpload() {
             <select
               required
               value={formData.category}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
                 category: e.target.value as "daily_standup" | "sprint_meeting" | "retrospective"
               }))}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
