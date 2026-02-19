@@ -20,12 +20,19 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
   const [isDashboardOpen, setIsDashboardOpen] = useState(true);
+  console.log('User Debug:', {
+    user,
+    roles: user?.roles,
+    role: user?.role,
+    rolesType: typeof user?.roles,
+    roleType: typeof user?.role
+  });
 
   const menuItems: MenuItem[] = [
     {
       label: 'Projects',
       path: '/dashboard/projects',
-      roles: ['PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      roles: ["SUPER_ADMIN", "ADMIN", "PROJECT_MANAGER", "DEVELOPER", "USER"],
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -169,19 +176,45 @@ export default function Sidebar() {
     }
   ];
 
+  // Helper function to normalize user roles
+  const getUserRoles = (): string[] => {
+    if (!user) return [];
+    
+    // If roles array exists and is valid
+    if (Array.isArray(user.roles) && user.roles.length > 0) {
+      return user.roles;
+    }
+    
+    // Handle legacy role field
+    if (user.role) {
+      // Check if role is a stringified array (e.g., '["SUPER_ADMIN"]')
+      if (typeof user.role === 'string' && user.role.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(user.role);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        } catch (e) {
+          // Not valid JSON, treat as single role
+        }
+      }
+      return [user.role];
+    }
+    
+    return [];
+  };
+
   // Filter menu items based on user roles
   const visibleMenuItems = menuItems.filter(item => {
     if (!user) return false;
-    // Check if user has any of the required roles
-    const userRoles = user.roles || [user.role]; // Support both roles array and legacy role field
+    const userRoles = getUserRoles();
     return item.roles.some(role => userRoles.includes(role));
   });
 
   // Filter dashboard submenu items based on user roles
   const visibleDashboardSubMenuItems = dashboardSubMenuItems.filter(item => {
     if (!user) return false;
-    // Check if user has any of the required roles
-    const userRoles = user.roles || [user.role]; // Support both roles array and legacy role field
+    const userRoles = getUserRoles();
     return item.roles.some(role => userRoles.includes(role));
   });
 
@@ -293,4 +326,4 @@ export default function Sidebar() {
       </nav>
     </aside>
   );
-}
+} 
