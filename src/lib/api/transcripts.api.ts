@@ -8,6 +8,7 @@ export interface Transcript {
     transcript_date: string;
     tags?: string[];
     file_name?: string;
+    project_id?: number | null;
     created_at: string;
 }
 

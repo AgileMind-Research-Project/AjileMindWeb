@@ -33,19 +33,9 @@ export default function TaskUpdatesPage() {
 
             // Map transcripts to Meeting compatible objects
             const transcriptMeetings: Meeting[] = transcriptsData.transcripts.map(t => ({
-                id: t.id,
-                meeting_id: t.id.toString(), // Use the transcript ID as meeting_id for now, or prefix if needed. Backend likely expects numeric ID? Or string?
-                // Wait, Meeting interface has meeting_id as STRING, id as NUMBER.
-                // Transcript has id as INTEGER.
-                // If I use `meeting_id: t.id.toString()`, it might conflict if real meetings use numeric strings.
-                // But typically UUIDs are used for meeting_id.
-                // Let's use `transcript-${t.id}` to be safe and update backend if needed.
-                // Actually, if I use `transcript-${t.id}`, the backend extraction endpoint needs to handle it.
-                // The user said "ita passe normal widiyta me process akma yanna".
-                // If I use a prefix, I MUST update backend service to handle it.
-                // Let's stick to prefix `transcript-` and I will update backend service next.
-
-                project_id: null, // We don't have project ID in transcripts yet
+                id: -t.id, // Negative to avoid ID collision
+                meeting_id: `transcript-${t.id}`,
+                project_id: t.project_id || null, // Use project ID if available
                 title: t.title || `Daily Standup - ${t.transcript_date}`,
                 description: 'Imported Transcript',
                 date: t.transcript_date,
