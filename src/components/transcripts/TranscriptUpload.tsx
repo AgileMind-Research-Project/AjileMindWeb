@@ -14,7 +14,7 @@ export default function TranscriptUpload() {
 
   const [formData, setFormData] = useState({
     title: "",
-    category: "daily_standup" as "daily_standup" | "sprint_meeting" | "retrospective",
+    category: "daily_standup" as "daily_standup" | "sprint_meeting" | "retrospective" | "brainstorming",
     transcriptDate: new Date().toISOString().split('T')[0],
     tags: [] as string[],
     pastedContent: "",
@@ -149,13 +149,14 @@ export default function TranscriptUpload() {
               value={formData.category}
               onChange={(e) => setFormData(prev => ({
                 ...prev,
-                category: e.target.value as "daily_standup" | "sprint_meeting" | "retrospective"
+                category: e.target.value as "daily_standup" | "sprint_meeting" | "retrospective" | "brainstorming"
               }))}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="daily_standup">Daily Standup</option>
               <option value="sprint_meeting">Sprint Meeting</option>
               <option value="retrospective">Retrospective</option>
+              <option value="brainstorming">Brainstorming</option>
             </select>
           </div>
 
