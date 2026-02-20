@@ -18,6 +18,51 @@ interface SprintBreakdown {
     availability: number;
 }
 
+interface ConfidenceForecasts {
+    best_case_end_date: string;
+    most_likely_end_date: string;
+    worst_case_end_date: string;
+    best_case_velocity: number;
+    most_likely_velocity: number;
+    worst_case_velocity: number;
+    confidence_range_days: number;
+}
+
+interface VelocityTrend {
+    trend_direction: 'ACCELERATING' | 'DECELERATING' | 'STABLE';
+    trend_value: number;
+    recent_avg_velocity: number;
+    overall_avg_velocity: number;
+    is_improving: boolean;
+    is_declining: boolean;
+}
+
+interface ScopeAnalysis {
+    original_planned_story_points: number;
+    current_total_story_points: number;
+    scope_change_story_points: number;
+    scope_change_ratio: number;
+    scope_change_percentage: number;
+    has_scope_creep: boolean;
+}
+
+interface DelayAttribution {
+    velocity_impact_days: number;
+    availability_impact_days: number;
+    scope_impact_days: number;
+    velocity_impact_percentage: number;
+    availability_impact_percentage: number;
+    scope_impact_percentage: number;
+    primary_cause: 'LOW_VELOCITY' | 'AVAILABILITY' | 'SCOPE_CHANGE' | 'NONE';
+}
+
+interface EarlyWarning {
+    type: string;
+    severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    message: string;
+    recommendation: string;
+}
+
 interface DelayAnalysis {
     project_id: number;
     project_name: string;
@@ -35,8 +80,9 @@ interface DelayAnalysis {
 
     // Sprint delay metrics
     planned_total_sprints: number;
-    expected_sprints_by_now: number;
     completed_sprints: number;
+    forecasted_remaining_sprints: number;
+    forecasted_total_sprints: number;
     sprint_delay: number;
 
     // Delay metrics
@@ -63,6 +109,13 @@ interface DelayAnalysis {
     total_planned_hours: number;
     total_leave_hours: number;
     availability_ratio: number;
+
+    // Enhanced Features
+    confidence_forecasts: ConfidenceForecasts;
+    velocity_trend: VelocityTrend;
+    scope_analysis: ScopeAnalysis;
+    delay_attribution: DelayAttribution;
+    early_warnings: EarlyWarning[];
 
     // Sprint breakdown
     sprint_breakdown: SprintBreakdown[];
@@ -431,9 +484,314 @@ export default function DelayManagementDashboard() {
                                 <span className="font-semibold text-red-600">{(delayData.sprint_delay ?? 0).toFixed(1)} sprints</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Expected by Now:</span>
-                                <span className="font-semibold text-gray-900">{(delayData.expected_sprints_by_now ?? 0).toFixed(1)} sprints</span>
+                                <span className="text-gray-600">Forecasted Remaining:</span>
+                                <span className="font-semibold text-gray-900">{(delayData.forecasted_remaining_sprints ?? 0).toFixed(1)} sprints</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ENHANCEMENT 1: Confidence-Based Forecast Timeline */}
+            {delayData && delayData.confidence_forecasts && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-4">
+                        <h3 className="text-lg font-bold text-white flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                            Confidence-Based Forecast (Best/Most Likely/Worst Case)
+                        </h3>
+                    </div>
+
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Best Case */}
+                            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border-2 border-green-300">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-bold text-green-700 uppercase tracking-wide">Best Case</span>
+                                    <span className="text-2xl">🎯</span>
+                                </div>
+                                <p className="text-lg font-bold text-green-900">{formatDate(delayData.confidence_forecasts.best_case_end_date)}</p>
+                                <p className="text-xs text-green-700 mt-1">Velocity: {delayData.confidence_forecasts.best_case_velocity.toFixed(1)} SP/sprint</p>
+                            </div>
+
+                            {/* Most Likely */}
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border-2 border-blue-300">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Most Likely</span>
+                                    <span className="text-2xl">📊</span>
+                                </div>
+                                <p className="text-lg font-bold text-blue-900">{formatDate(delayData.confidence_forecasts.most_likely_end_date)}</p>
+                                <p className="text-xs text-blue-700 mt-1">Velocity: {delayData.confidence_forecasts.most_likely_velocity.toFixed(1)} SP/sprint</p>
+                            </div>
+
+                            {/* Worst Case */}
+                            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border-2 border-red-300">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-bold text-red-700 uppercase tracking-wide">Worst Case</span>
+                                    <span className="text-2xl">⚠️</span>
+                                </div>
+                                <p className="text-lg font-bold text-red-900">{formatDate(delayData.confidence_forecasts.worst_case_end_date)}</p>
+                                <p className="text-xs text-red-700 mt-1">Velocity: {delayData.confidence_forecasts.worst_case_velocity.toFixed(1)} SP/sprint</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 bg-gray-50 rounded-lg p-3 text-center">
+                            <p className="text-sm text-gray-600">
+                                <span className="font-semibold">Confidence Range:</span> {delayData.confidence_forecasts.confidence_range_days} days
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ENHANCEMENT 2: Velocity Trend + ENHANCEMENT 3: Scope Change */}
+            {delayData && delayData.velocity_trend && delayData.scope_analysis && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Velocity Trend Card */}
+                    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+                            <h3 className="text-lg font-bold text-white flex items-center">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                                Velocity Trend Analysis
+                            </h3>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <p className="text-3xl font-bold text-gray-900">
+                                        {delayData.velocity_trend.trend_direction}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {delayData.velocity_trend.is_improving && '📈 Team is accelerating'}
+                                        {delayData.velocity_trend.is_declining && '📉 Team is slowing down'}
+                                        {!delayData.velocity_trend.is_improving && !delayData.velocity_trend.is_declining && '➡️ Velocity is stable'}
+                                    </p>
+                                </div>
+                                <div className={`text-5xl ${delayData.velocity_trend.is_improving ? 'text-green-500' : delayData.velocity_trend.is_declining ? 'text-red-500' : 'text-gray-400'}`}>
+                                    {delayData.velocity_trend.is_improving && '↗'}
+                                    {delayData.velocity_trend.is_declining && '↘'}
+                                    {!delayData.velocity_trend.is_improving && !delayData.velocity_trend.is_declining && '→'}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 bg-gray-50 rounded-lg p-4">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Recent Avg Velocity:</span>
+                                    <span className="font-semibold text-gray-900">{delayData.velocity_trend.recent_avg_velocity.toFixed(1)} SP</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Overall Avg Velocity:</span>
+                                    <span className="font-semibold text-gray-900">{delayData.velocity_trend.overall_avg_velocity.toFixed(1)} SP</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Trend Value:</span>
+                                    <span className={`font-semibold ${delayData.velocity_trend.trend_value >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {delayData.velocity_trend.trend_value >= 0 ? '+' : ''}{delayData.velocity_trend.trend_value.toFixed(1)} SP
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Scope Change Card */}
+                    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-orange-600 to-red-600 px-6 py-4">
+                            <h3 className="text-lg font-bold text-white flex items-center">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                                Scope Change Detection
+                            </h3>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <p className="text-3xl font-bold text-gray-900">
+                                        {delayData.scope_analysis.scope_change_percentage >= 0 ? '+' : ''}{delayData.scope_analysis.scope_change_percentage.toFixed(1)}%
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {delayData.scope_analysis.has_scope_creep ? '⚠️ Significant scope creep detected' : '✅ Scope is under control'}
+                                    </p>
+                                </div>
+                                <div className={`text-5xl ${delayData.scope_analysis.has_scope_creep ? 'text-red-500' : 'text-green-500'}`}>
+                                    {delayData.scope_analysis.has_scope_creep ? '📈' : '✓'}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 bg-gray-50 rounded-lg p-4">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Original Planned SP:</span>
+                                    <span className="font-semibold text-gray-900">{delayData.scope_analysis.original_planned_story_points.toFixed(0)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Current Total SP:</span>
+                                    <span className="font-semibold text-gray-900">{delayData.scope_analysis.current_total_story_points}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Scope Change:</span>
+                                    <span className={`font-semibold ${delayData.scope_analysis.scope_change_story_points >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        {delayData.scope_analysis.scope_change_story_points >= 0 ? '+' : ''}{delayData.scope_analysis.scope_change_story_points.toFixed(0)} SP
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ENHANCEMENT 4: Delay Attribution Breakdown */}
+            {delayData && delayData.delay_attribution && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+                        <h3 className="text-lg font-bold text-white flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                            </svg>
+                            Delay Attribution Breakdown (Root Cause Analysis)
+                        </h3>
+                    </div>
+
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Attribution Chart */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-4">Delay Contribution by Factor</h4>
+                                <div className="space-y-3">
+                                    {/* Velocity Impact */}
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-gray-600">🐌 Low Velocity</span>
+                                            <span className="font-semibold text-gray-900">{delayData.delay_attribution.velocity_impact_percentage.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div
+                                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                                                style={{ width: `${delayData.delay_attribution.velocity_impact_percentage}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">{delayData.delay_attribution.velocity_impact_days.toFixed(1)} days</p>
+                                    </div>
+
+                                    {/* Availability Impact */}
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-gray-600">👥 Team Availability</span>
+                                            <span className="font-semibold text-gray-900">{delayData.delay_attribution.availability_impact_percentage.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div
+                                                className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-500"
+                                                style={{ width: `${delayData.delay_attribution.availability_impact_percentage}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">{delayData.delay_attribution.availability_impact_days.toFixed(1)} days</p>
+                                    </div>
+
+                                    {/* Scope Impact */}
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-gray-600">📦 Scope Change</span>
+                                            <span className="font-semibold text-gray-900">{delayData.delay_attribution.scope_impact_percentage.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div
+                                                className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                                                style={{ width: `${delayData.delay_attribution.scope_impact_percentage}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">{delayData.delay_attribution.scope_impact_days.toFixed(1)} days</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Primary Cause */}
+                            <div className="flex items-center justify-center">
+                                <div className="text-center">
+                                    <p className="text-sm font-semibold text-gray-600 mb-3">Primary Delay Cause</p>
+                                    <div className={`inline-block px-6 py-4 rounded-xl ${delayData.delay_attribution.primary_cause === 'LOW_VELOCITY' ? 'bg-blue-100 border-2 border-blue-500' :
+                                        delayData.delay_attribution.primary_cause === 'AVAILABILITY' ? 'bg-orange-100 border-2 border-orange-500' :
+                                            delayData.delay_attribution.primary_cause === 'SCOPE_CHANGE' ? 'bg-purple-100 border-2 border-purple-500' :
+                                                'bg-gray-100 border-2 border-gray-500'
+                                        }`}>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {delayData.delay_attribution.primary_cause === 'LOW_VELOCITY' && '🐌 Low Velocity'}
+                                            {delayData.delay_attribution.primary_cause === 'AVAILABILITY' && '👥 Availability'}
+                                            {delayData.delay_attribution.primary_cause === 'SCOPE_CHANGE' && '📦 Scope Change'}
+                                            {delayData.delay_attribution.primary_cause === 'NONE' && '✅ No Delay'}
+                                        </p>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-3">
+                                        {delayData.delay_attribution.primary_cause === 'LOW_VELOCITY' && 'Team velocity is below expected rate'}
+                                        {delayData.delay_attribution.primary_cause === 'AVAILABILITY' && 'Leave hours are impacting delivery'}
+                                        {delayData.delay_attribution.primary_cause === 'SCOPE_CHANGE' && 'Project scope has increased'}
+                                        {delayData.delay_attribution.primary_cause === 'NONE' && 'Project is on track'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ENHANCEMENT 5: Early Warning System */}
+            {delayData && delayData.early_warnings && delayData.early_warnings.length > 0 && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-red-600 to-orange-600 px-6 py-4">
+                        <h3 className="text-lg font-bold text-white flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Early Warning System ({delayData.early_warnings.length} Alert{delayData.early_warnings.length !== 1 ? 's' : ''})
+                        </h3>
+                    </div>
+
+                    <div className="p-6">
+                        <div className="space-y-4">
+                            {delayData.early_warnings.map((warning, index) => (
+                                <div
+                                    key={index}
+                                    className={`rounded-lg p-4 border-l-4 ${warning.severity === 'CRITICAL' ? 'bg-red-50 border-red-500' :
+                                        warning.severity === 'HIGH' ? 'bg-orange-50 border-orange-500' :
+                                            warning.severity === 'MEDIUM' ? 'bg-yellow-50 border-yellow-500' :
+                                                'bg-blue-50 border-blue-500'
+                                        }`}
+                                >
+                                    <div className="flex items-start">
+                                        <div className="flex-shrink-0">
+                                            <span className="text-2xl">
+                                                {warning.severity === 'CRITICAL' && '🚨'}
+                                                {warning.severity === 'HIGH' && '⚠️'}
+                                                {warning.severity === 'MEDIUM' && '⚡'}
+                                                {warning.severity === 'LOW' && 'ℹ️'}
+                                            </span>
+                                        </div>
+                                        <div className="ml-3 flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <h4 className="text-sm font-bold text-gray-900">{warning.type.replace(/_/g, ' ')}</h4>
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${warning.severity === 'CRITICAL' ? 'bg-red-200 text-red-800' :
+                                                    warning.severity === 'HIGH' ? 'bg-orange-200 text-orange-800' :
+                                                        warning.severity === 'MEDIUM' ? 'bg-yellow-200 text-yellow-800' :
+                                                            'bg-blue-200 text-blue-800'
+                                                    }`}>
+                                                    {warning.severity}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-700 mb-2">{warning.message}</p>
+                                            <div className="bg-white bg-opacity-50 rounded p-2 mt-2">
+                                                <p className="text-xs font-semibold text-gray-600 mb-1">💡 Recommendation:</p>
+                                                <p className="text-xs text-gray-700">{warning.recommendation}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
