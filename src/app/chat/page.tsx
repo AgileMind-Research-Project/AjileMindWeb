@@ -66,9 +66,19 @@ const redisChatAPI = {
     },
 
     // Create channel
-    createChannel: async (name: string, description?: string) => {
+    createChannel: async (name: string, description?: string, projectId?: number, projectName?: string) => {
         const token = redisChatAPI.getToken();
         if (!token) throw new Error('Not authenticated');
+
+        const body: any = {
+            name,
+            description: description || '',
+            is_private: false
+        };
+        if (projectId) {
+            body.project_id = projectId;
+            body.team_name = projectName || '';
+        }
 
         const response = await fetch(`${API_URL}/chat/channels`, {
             method: 'POST',
@@ -76,18 +86,45 @@ const redisChatAPI = {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                name,
-                description: description || '',
-                is_private: false
-            })
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) throw new Error('Failed to create channel');
         return await response.json();
     },
 
-    // Get messages
+    // Get all projects
+    getProjects: async () => {
+        const token = redisChatAPI.getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await fetch(`${API_URL}/projects/?page=1&limit=100`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch projects');
+        return await response.json();
+    },
+
+    // Get project details (includes lead & managers)
+    getProjectDetails: async (projectId: number) => {
+        const token = redisChatAPI.getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await fetch(`${API_URL}/projects/${projectId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch project details');
+        return await response.json();
+    },
+
     getMessages: async (channelId: string, limit: number = 50) => {
         const token = redisChatAPI.getToken();
         if (!token) throw new Error('Not authenticated');
@@ -194,6 +231,22 @@ const redisChatAPI = {
 
         if (!response.ok) throw new Error('Failed to add members');
         return await response.json();
+    },
+
+    // Delete channel
+    deleteChannel: async (channelId: string) => {
+        const token = redisChatAPI.getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await fetch(`${API_URL}/chat/channels/${channelId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to delete channel');
+        return await response.json();
     }
 };
 
@@ -208,8 +261,23 @@ const transformRedisChannel = (redisChannel: any): Channel => ({
     created_at: redisChannel.created_at,
     updated_at: redisChannel.updated_at || redisChannel.created_at,
     member_count: redisChannel.member_count || 1,
-    unread_count: 0
+    unread_count: 0,
+    team_name: redisChannel.team_name || undefined,
+    team_id: redisChannel.project_id ? String(redisChannel.project_id) : undefined,
+    is_member: redisChannel.is_member
 });
+
+interface Project {
+    project_id: number;
+    project_name: string;
+    key: string;
+    project_type: string;
+    start_date: string;
+    end_date: string;
+    description?: string;
+    project_lead?: string;
+    project_manager?: string[];
+}
 
 // Transform Redis message to store format
 const transformRedisMessage = (redisMessage: any): Message => ({
@@ -228,11 +296,18 @@ const transformRedisMessage = (redisMessage: any): Message => ({
 
 function ChatContent() {
     const [currentUserId, setCurrentUserId] = useState<string>('');
+    const [currentUserRoles, setCurrentUserRoles] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [channelCreationType, setChannelCreationType] = useState<'chat' | 'project'>('chat');
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelDesc, setNewChannelDesc] = useState('');
     const [creating, setCreating] = useState(false);
+    // Project channel state
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [loadingProjects, setLoadingProjects] = useState(false);
+    const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+    const [projectMembers, setProjectMembers] = useState<string[]>([]); // emails/names of project members
     const [showAddMembersModal, setShowAddMembersModal] = useState(false);
     const [availableUsers, setAvailableUsers] = useState<any[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -280,12 +355,13 @@ function ChatContent() {
                     // Try user_id first, then fall back to sub
                     const userId = payload.user_id || payload.sub || '';
                     setCurrentUserId(userId);
+                    const roles = payload.roles || [];
+                    setCurrentUserRoles(roles);
                     console.log('Current user ID:', userId);
                 }
             }
         } catch (error) {
             console.error('Failed to decode token:', error);
-            // Fallback to localStorage
             const userId = localStorage.getItem('user_id') || '';
             setCurrentUserId(userId);
         }
@@ -303,9 +379,44 @@ function ChatContent() {
         setError(null);
         try {
             const response = await redisChatAPI.getChannels();
+
+            // Get user's project IDs from auth storage
+            let myProjectIds: number[] = [];
+            try {
+                const authStorage = localStorage.getItem('auth-storage');
+                if (authStorage) {
+                    const parsed = JSON.parse(authStorage);
+                    const storedProjects = parsed.state?.user?.projects;
+                    if (Array.isArray(storedProjects)) {
+                        myProjectIds = storedProjects;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to parse auth storage for projects', e);
+            }
+
+            // Trigger project load for UI but don't wait
+            loadProjects();
+
             if (response.success && response.data?.channels) {
-                const transformedChannels = response.data.channels.map(transformRedisChannel);
-                setChannels(transformedChannels);
+                const allChannels = response.data.channels.map(transformRedisChannel);
+
+                // Filter: Show if (I am a member) OR (Is a project channel AND I have access)
+                const visibleChannels = allChannels.filter((ch: Channel) => {
+                    // 1. If I am a member (joined), always show
+                    if (ch.is_member) return true;
+
+                    // 2. If it is a project channel, show if I have access to the project
+                    const pId = ch.project_id || (ch.team_id ? parseInt(ch.team_id) : null);
+                    if (pId !== null && !isNaN(pId)) {
+                        return myProjectIds.includes(pId);
+                    }
+
+                    // 3. Otherwise (Public generic channel I haven't joined) -> Hide
+                    return false;
+                });
+
+                setChannels(visibleChannels);
             }
         } catch (error: any) {
             console.error('Failed to load channels:', error);
@@ -314,7 +425,6 @@ function ChatContent() {
             setLoadingChannels(false);
         }
     };
-
     const loadMessages = async (channelId: string) => {
         setLoadingMessages(true);
         try {
@@ -332,17 +442,72 @@ function ChatContent() {
         }
     };
 
+    const loadProjects = async () => {
+        setLoadingProjects(true);
+        try {
+            const response = await redisChatAPI.getProjects();
+            if (response.data) {
+                setProjects(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to load projects:', error);
+        } finally {
+            setLoadingProjects(false);
+        }
+    };
+
+    const handleProjectSelect = async (projectId: number) => {
+        setSelectedProjectId(projectId);
+        const project = projects.find(p => p.project_id === projectId);
+        if (project) {
+            // Auto-fill channel name with project name
+            setNewChannelName(project.project_name);
+            // Build project members list from lead + managers
+            const members: string[] = [];
+            if (project.project_lead) members.push(project.project_lead);
+            if (project.project_manager) members.push(...project.project_manager);
+            setProjectMembers(members);
+        }
+    };
+
+    const handleOpenCreateModal = () => {
+        setChannelCreationType('chat');
+        setNewChannelName('');
+        setNewChannelDesc('');
+        setSelectedProjectId(null);
+        setProjectMembers([]);
+        setShowCreateModal(true);
+    };
+
     const handleCreateChannel = async () => {
         if (!newChannelName.trim()) return;
+        if (channelCreationType === 'project' && !selectedProjectId) return;
 
         setCreating(true);
         try {
-            const response = await redisChatAPI.createChannel(newChannelName, newChannelDesc);
+            const selectedProject = channelCreationType === 'project'
+                ? projects.find(p => p.project_id === selectedProjectId)
+                : undefined;
+
+            const response = await redisChatAPI.createChannel(
+                newChannelName,
+                newChannelDesc,
+                selectedProject?.project_id,
+                selectedProject?.project_name
+            );
+
             if (response.success && response.data) {
-                const transformedChannel = transformRedisChannel(response.data);
+                // Inject team_name so sidebar grouping works
+                const rawData = {
+                    ...response.data,
+                    team_name: selectedProject?.project_name || undefined
+                };
+                const transformedChannel = transformRedisChannel(rawData);
                 addChannel(transformedChannel);
                 setNewChannelName('');
                 setNewChannelDesc('');
+                setSelectedProjectId(null);
+                setProjectMembers([]);
                 setShowCreateModal(false);
             }
         } catch (error) {
@@ -420,7 +585,32 @@ function ChatContent() {
         try {
             const response = await redisChatAPI.getUsers();
             if (response.success && response.data) {
-                setAvailableUsers(response.data);
+                let users = response.data;
+                // If active channel is a project channel, filter to project members only
+                if (activeChannel?.team_id && activeChannel?.team_name) {
+                    const projId = parseInt(activeChannel.team_id);
+                    if (!isNaN(projId)) {
+                        // Load project details to get lead & managers
+                        try {
+                            const projResp = await redisChatAPI.getProjectDetails(projId);
+                            const proj = projResp.data || projResp;
+                            const members: string[] = [];
+                            if (proj.project_lead) members.push(proj.project_lead);
+                            if (proj.project_manager) members.push(...proj.project_manager);
+                            // Filter users whose email or full name is in project members
+                            users = users.filter((u: any) => {
+                                const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+                                return members.some(m =>
+                                    (u.email && u.email.toLowerCase() === m.toLowerCase()) ||
+                                    (fullName && fullName.toLowerCase() === m.toLowerCase())
+                                );
+                            });
+                        } catch (e) {
+                            console.warn('Could not load project details for member filter:', e);
+                        }
+                    }
+                }
+                setAvailableUsers(users);
             }
         } catch (error) {
             console.error('Failed to load users:', error);
@@ -529,11 +719,27 @@ function ChatContent() {
         }
     };
 
+    const handleDeleteChannel = async () => {
+        if (!activeChannelId) return;
+
+        if (confirm(`Are you sure you want to delete channel "${activeChannel?.name}"? This cannot be undone.`)) {
+            try {
+                await redisChatAPI.deleteChannel(activeChannelId);
+                // Remove from store
+                useChatStore.getState().removeChannel(activeChannelId);
+                alert('Channel deleted successfully');
+            } catch (error) {
+                console.error('Failed to delete channel:', error);
+                alert('Failed to delete channel');
+            }
+        }
+    };
+
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Channel Sidebar */}
             <div className="w-80 flex-shrink-0">
-                <ChannelSidebar onCreateChannel={() => setShowCreateModal(true)} />
+                <ChannelSidebar onCreateChannel={handleOpenCreateModal} />
             </div>
 
             {/* Main Chat Area */}
@@ -602,6 +808,20 @@ function ChatContent() {
                                         Add Members
                                     </button>
 
+                                    {/* Delete Channel Button (Super Admin Only) */}
+                                    {currentUserRoles.includes('SUPER_ADMIN') && (
+                                        <button
+                                            onClick={handleDeleteChannel}
+                                            className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                                            title="Delete Channel"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            Delete
+                                        </button>
+                                    )}
+
                                     {/* Connection status */}
                                     <span className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : 'text-gray-400'}`}>
                                         <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-600' : 'bg-gray-400'}`} />
@@ -655,13 +875,14 @@ function ChatContent() {
 
             {/* Create Channel Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <div className="flex items-center justify-between mb-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                             <h2 className="text-xl font-semibold text-gray-900">Create Channel</h2>
                             <button
                                 onClick={() => setShowCreateModal(false)}
-                                className="text-gray-400 hover:text-gray-600"
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -669,7 +890,94 @@ function ChatContent() {
                             </button>
                         </div>
 
-                        <div className="space-y-4">
+                        {/* Channel Type Selector */}
+                        <div className="px-6 pt-4">
+                            <p className="text-sm font-medium text-gray-600 mb-3">Select channel type</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                {/* Chat Channel */}
+                                <button
+                                    onClick={() => {
+                                        setChannelCreationType('chat');
+                                        setNewChannelName('');
+                                        setSelectedProjectId(null);
+                                        setProjectMembers([]);
+                                    }}
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${channelCreationType === 'chat'
+                                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                    <span className="text-sm font-semibold">Chat Channel</span>
+                                    <span className="text-xs text-center opacity-70">General purpose channel for any team</span>
+                                </button>
+
+                                {/* Project Channel */}
+                                <button
+                                    onClick={() => {
+                                        setChannelCreationType('project');
+                                        setNewChannelName('');
+                                        setSelectedProjectId(null);
+                                        setProjectMembers([]);
+                                        if (projects.length === 0) loadProjects();
+                                    }}
+                                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${channelCreationType === 'project'
+                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                    </svg>
+                                    <span className="text-sm font-semibold">Project Channel</span>
+                                    <span className="text-xs text-center opacity-70">Linked to a project, access restricted to project members</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 space-y-4">
+
+                            {/* Project Selector (only for Project Channel) */}
+                            {channelCreationType === 'project' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Select Project *
+                                    </label>
+                                    {loadingProjects ? (
+                                        <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600" />
+                                            Loading projects...
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={selectedProjectId ?? ''}
+                                            onChange={(e) => {
+                                                const pid = parseInt(e.target.value);
+                                                if (!isNaN(pid)) handleProjectSelect(pid);
+                                                else {
+                                                    setSelectedProjectId(null);
+                                                    setNewChannelName('');
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                        >
+                                            <option value="">-- Select a project --</option>
+                                            {projects.map(p => (
+                                                <option key={p.project_id} value={p.project_id}>
+                                                    {p.project_name} ({p.key})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    {projects.length === 0 && !loadingProjects && (
+                                        <p className="text-xs text-amber-600 mt-1">No projects found. Please create a project first.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Channel Name */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Channel Name *
@@ -678,12 +986,13 @@ function ChatContent() {
                                     type="text"
                                     value={newChannelName}
                                     onChange={(e) => setNewChannelName(e.target.value)}
-                                    placeholder="engineering"
+                                    placeholder={channelCreationType === 'project' ? 'Auto-filled from project' : 'engineering'}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    autoFocus
+                                    autoFocus={channelCreationType === 'chat'}
                                 />
                             </div>
 
+                            {/* Description */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Description (optional)
@@ -691,13 +1000,26 @@ function ChatContent() {
                                 <textarea
                                     value={newChannelDesc}
                                     onChange={(e) => setNewChannelDesc(e.target.value)}
-                                    placeholder="Engineering team discussions"
-                                    rows={3}
+                                    placeholder={channelCreationType === 'project' ? 'Project discussion channel' : 'Engineering team discussions'}
+                                    rows={2}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                                 />
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4">
+                            {/* Project members info badge */}
+                            {channelCreationType === 'project' && selectedProjectId && projectMembers.length > 0 && (
+                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                                    <div className="flex items-center gap-2 text-sm text-indigo-700">
+                                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
+                                        <span className="font-medium">{projectMembers.length} project member{projectMembers.length !== 1 ? 's' : ''} will have access:</span>
+                                    </div>
+                                    <p className="text-xs text-indigo-600 mt-1 ml-6">{projectMembers.join(', ')}</p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     onClick={() => setShowCreateModal(false)}
                                     className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -707,8 +1029,12 @@ function ChatContent() {
                                 </button>
                                 <button
                                     onClick={handleCreateChannel}
-                                    disabled={!newChannelName.trim() || creating}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    disabled={
+                                        !newChannelName.trim() || creating ||
+                                        (channelCreationType === 'project' && !selectedProjectId)
+                                    }
+                                    className={`px-4 py-2 text-white rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed ${channelCreationType === 'project' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'
+                                        }`}
                                 >
                                     {creating ? 'Creating...' : 'Create Channel'}
                                 </button>
@@ -746,6 +1072,16 @@ function ChatContent() {
                                     </p>
                                 </div>
 
+                                {activeChannel?.team_id && activeChannel?.team_name && (
+                                    <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                        <svg className="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        <span className="text-sm text-indigo-700">
+                                            <span className="font-medium">Project Channel</span> — showing only members of <span className="font-semibold">{activeChannel.team_name}</span>
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex-1 overflow-y-auto mb-4 border border-gray-200 rounded-lg">
                                     {availableUsers.length === 0 ? (
                                         <div className="p-4 text-center text-gray-500">
@@ -808,7 +1144,7 @@ function ChatContent() {
 
             {/* Transcripts Modal */}
             {showTranscriptsModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col shadow-xl">
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -923,7 +1259,7 @@ function ChatContent() {
 
             {/* Start Meeting Modal */}
             {showMeetingModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-6 w-full max-w-md">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-semibold text-gray-900">Start Meeting</h2>

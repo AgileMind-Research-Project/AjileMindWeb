@@ -24,16 +24,16 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
         channel.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Group channels by team
+    // Group channels by team/project
     const groupedChannels = useMemo(() => {
-        const groups: Record<string, Channel[]> = {};
+        const groups: Record<string, { channels: Channel[], isProject: boolean }> = {};
 
         filteredChannels.forEach((channel) => {
-            const teamKey = channel.team_name || 'Unassigned';
+            const teamKey = channel.team_name || 'General';
             if (!groups[teamKey]) {
-                groups[teamKey] = [];
+                groups[teamKey] = { channels: [], isProject: !!channel.team_id };
             }
-            groups[teamKey].push(channel);
+            groups[teamKey].channels.push(channel);
         });
 
         return groups;
@@ -43,7 +43,14 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
         setActiveChannelId(channelId);
     };
 
-    const getChannelIcon = (type: Channel['type']) => {
+    const getChannelIcon = (type: Channel['type'], isProject?: boolean) => {
+        if (isProject) {
+            return (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+            );
+        }
         switch (type) {
             case 'dm':
                 return (
@@ -121,34 +128,48 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
                     </div>
                 ) : (
                     <div>
-                        {Object.entries(groupedChannels).map(([teamName, teamChannels], index) => (
+                        {Object.entries(groupedChannels).map(([teamName, group], index) => (
                             <div key={teamName}>
-                                {/* Team Label */}
-                                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+                                {/* Team / Project Label */}
+                                <div className={`px-4 py-3 border-b ${group.isProject
+                                        ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100'
+                                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100'
+                                    }`}>
                                     <div className="flex items-center gap-2">
-                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                        </svg>
-                                        <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wide">
+                                        {group.isProject ? (
+                                            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                            </svg>
+                                        )}
+                                        <h3 className={`text-sm font-bold uppercase tracking-wide ${group.isProject ? 'text-indigo-900' : 'text-blue-900'
+                                            }`}>
                                             {teamName}
                                         </h3>
-                                        <span className="ml-auto px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-                                            {teamChannels.length}
+                                        {group.isProject && (
+                                            <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded uppercase tracking-wider">Project</span>
+                                        )}
+                                        <span className={`ml-auto px-2 py-0.5 text-xs font-medium rounded-full ${group.isProject ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
+                                            }`}>
+                                            {group.channels.length}
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* Channels in this team */}
+                                {/* Channels in this group */}
                                 <ul>
-                                    {teamChannels.map((channel) => (
+                                    {group.channels.map((channel) => (
                                         <li key={channel.id}>
                                             <button
                                                 onClick={() => handleChannelClick(channel.id)}
                                                 className={`w-full p-3 flex items-center gap-3 hover:bg-gray-50 transition-colors ${activeChannelId === channel.id ? 'bg-blue-50 border-l-4 border-blue-600' : ''
                                                     }`}
                                             >
-                                                <div className="text-gray-600">
-                                                    {getChannelIcon(channel.type)}
+                                                <div className={channel.team_id ? 'text-indigo-500' : 'text-gray-600'}>
+                                                    {getChannelIcon(channel.type, !!channel.team_id)}
                                                 </div>
 
                                                 <div className="flex-1 text-left">
@@ -175,7 +196,7 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
                                     ))}
                                 </ul>
 
-                                {/* Separator between teams (not after last team) */}
+                                {/* Separator between groups (not after last group) */}
                                 {index < Object.keys(groupedChannels).length - 1 && (
                                     <div className="border-b-2 border-gray-200 my-1" />
                                 )}
