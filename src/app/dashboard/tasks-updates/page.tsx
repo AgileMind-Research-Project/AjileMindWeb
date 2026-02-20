@@ -49,25 +49,31 @@ export default function TaskUpdatesPage() {
                 attendees: []
             } as unknown as Meeting)); // Type assertion because we are adding a custom meeting
 
-            // Filter logic
-            const allPotentialMeetings = [...meetingsData, ...transcriptMeetings];
+            // Filter logic: Deduplicate by meeting_id
+            // Use a Map to keep unique meetings, preferring meetingsData over transcriptMeetings if there's a collision
+            const meetingMap = new Map<string, Meeting>();
+
+            meetingsData.forEach(m => meetingMap.set(m.meeting_id.toString(), m));
+            transcriptMeetings.forEach(m => {
+                if (!meetingMap.has(m.meeting_id.toString())) {
+                    meetingMap.set(m.meeting_id.toString(), m);
+                }
+            });
+
+            const allPotentialMeetings = Array.from(meetingMap.values());
 
             const relevantMeetings = allPotentialMeetings.filter(m => {
                 // If we filter by status, we check if this meeting has Any updates matching that status
                 // Or if we are in catch-all mode (PENDING usually implies show things that need attention)
 
                 // Check if any updates exist for this meeting
-                const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id);
+                const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id.toString());
 
                 if (filterStatus === 'ALL') return true;
 
-                // If filtering by PENDING, show meetings that have pending updates OR are IN_PROGRESS (meaning pending action)
-                // OR are recently imported transcripts (COMPLETED but maybe no updates yet? or just show all)
-                // The user wants to see the listing.
-                // Let's show all daily standups regardless of filter? Or respect filter?
-                // Using existing logic:
+                // If filtering by PENDING, show meetings that have pending updates OR are IN_PROGRESS
                 const hasMatchingUpdates = meetingUpdates.some(u => u.approval_status === filterStatus);
-                const isPendingRelevant = filterStatus === 'PENDING' && (m.status === 'IN_PROGRESS' || m.category === 'DAILY_STANDUP'); // Always show daily standups in Pending?
+                const isPendingRelevant = filterStatus === 'PENDING' && (m.status === 'IN_PROGRESS' || m.category === 'DAILY_STANDUP');
 
                 return hasMatchingUpdates || isPendingRelevant || (m.status === 'COMPLETED' && m.category === 'DAILY_STANDUP');
             });
