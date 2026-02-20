@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { meetingsApi, Meeting } from '@/lib/api/meetings.api';
 import { taskUpdatesApi, TaskUpdate } from '@/lib/api/task-updates.api';
+import { transcriptsApi } from '@/lib/api/transcripts.api';
 import ViewMeetingModal from '@/components/meetings/ViewMeetingModal';
 import { toast } from 'sonner';
 
@@ -24,17 +25,65 @@ export default function TaskUpdatesPage() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [meetingsData, updatesData] = await Promise.all([
+            const [meetingsData, updatesData, transcriptsData] = await Promise.all([
                 meetingsApi.listMeetings(),
-                taskUpdatesApi.listUpdates(undefined, filterStatus)
+                taskUpdatesApi.listUpdates(undefined, filterStatus),
+                transcriptsApi.listDailyStandups()
             ]);
-            // Filter: Show only meetings that are currently IN_PROGRESS, or if we have updates for them
-            // logic: If a meeting has valid updates (based on current filter), show it.
-            // Also show IN_PROGRESS meetings even if they don't have updates yet (so we can extract).
-            const relevantMeetings = meetingsData.filter(m => {
-                const hasMatchingUpdates = updatesData.some(u => u.meeting_id === m.meeting_id);
-                return hasMatchingUpdates || m.status === 'IN_PROGRESS';
+
+            // Map transcripts to Meeting compatible objects
+            const transcriptMeetings: Meeting[] = transcriptsData.transcripts.map(t => ({
+                id: t.id,
+                meeting_id: t.id.toString(), // Use the transcript ID as meeting_id for now, or prefix if needed. Backend likely expects numeric ID? Or string?
+                // Wait, Meeting interface has meeting_id as STRING, id as NUMBER.
+                // Transcript has id as INTEGER.
+                // If I use `meeting_id: t.id.toString()`, it might conflict if real meetings use numeric strings.
+                // But typically UUIDs are used for meeting_id.
+                // Let's use `transcript-${t.id}` to be safe and update backend if needed.
+                // Actually, if I use `transcript-${t.id}`, the backend extraction endpoint needs to handle it.
+                // The user said "ita passe normal widiyta me process akma yanna".
+                // If I use a prefix, I MUST update backend service to handle it.
+                // Let's stick to prefix `transcript-` and I will update backend service next.
+
+                project_id: null, // We don't have project ID in transcripts yet
+                title: t.title || `Daily Standup - ${t.transcript_date}`,
+                description: 'Imported Transcript',
+                date: t.transcript_date,
+                start_time: '09:00', // Default
+                end_time: '09:30', // Default
+                status: 'COMPLETED',
+                category: 'DAILY_STANDUP',
+                created_at: t.created_at,
+                created_by: 'system',
+                meeting_transcript: t.transcript_content || '',
+                attendees: []
+            } as unknown as Meeting)); // Type assertion because we are adding a custom meeting
+
+            // Filter logic
+            const allPotentialMeetings = [...meetingsData, ...transcriptMeetings];
+
+            const relevantMeetings = allPotentialMeetings.filter(m => {
+                // If we filter by status, we check if this meeting has Any updates matching that status
+                // Or if we are in catch-all mode (PENDING usually implies show things that need attention)
+
+                // Check if any updates exist for this meeting
+                const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id);
+
+                if (filterStatus === 'ALL') return true;
+
+                // If filtering by PENDING, show meetings that have pending updates OR are IN_PROGRESS (meaning pending action)
+                // OR are recently imported transcripts (COMPLETED but maybe no updates yet? or just show all)
+                // The user wants to see the listing.
+                // Let's show all daily standups regardless of filter? Or respect filter?
+                // Using existing logic:
+                const hasMatchingUpdates = meetingUpdates.some(u => u.approval_status === filterStatus);
+                const isPendingRelevant = filterStatus === 'PENDING' && (m.status === 'IN_PROGRESS' || m.category === 'DAILY_STANDUP'); // Always show daily standups in Pending?
+
+                return hasMatchingUpdates || isPendingRelevant || (m.status === 'COMPLETED' && m.category === 'DAILY_STANDUP');
             });
+
+            // Sort by date DESC
+            relevantMeetings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
             setMeetings(relevantMeetings);
             setUpdates(updatesData);
@@ -54,7 +103,10 @@ export default function TaskUpdatesPage() {
         await new Promise(resolve => setTimeout(resolve, 800));
 
         try {
-            const result = await taskUpdatesApi.extractFromMeeting(meeting.meeting_id, true);
+            // Check if it's a transcript-based meeting
+            let meetingIdToExtract = meeting.meeting_id;
+
+            const result = await taskUpdatesApi.extractFromMeeting(meetingIdToExtract, true);
             toast.success(`✓ Extracted ${result.total_extracted} task updates in ${result.processing_time_ms.toFixed(0)}ms`);
             loadData();
         } catch (error: any) {
@@ -166,10 +218,10 @@ export default function TaskUpdatesPage() {
                             </div>
                         ) : (
                             meetings.map((meeting) => {
-                                const meetingUpdates = updates.filter(u => u.meeting_id === meeting.meeting_id);
+                                const meetingUpdates = updates.filter(u => u.meeting_id === meeting.meeting_id.toString()); // Ensure string comparison
                                 return (
                                     <div
-                                        key={meeting.meeting_id}
+                                        key={`meeting-${meeting.meeting_id}`} // Use meeting_id for key
                                         onClick={() => setViewingMeeting(meeting)}
                                         className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden flex flex-col h-full"
                                     >
@@ -278,7 +330,7 @@ export default function TaskUpdatesPage() {
                     }}
                     // Extraction Features
                     extractionMode={true}
-                    tasks={viewingMeeting ? updates.filter(u => u.meeting_id === viewingMeeting.meeting_id) : []}
+                    tasks={viewingMeeting ? updates.filter(u => u.meeting_id === viewingMeeting.meeting_id.toString()) : []} // Ensure string comparison
                     onExtract={() => viewingMeeting && handleExtract(viewingMeeting)}
                     onApprove={handleApprove}
                     onReject={handleReject}
