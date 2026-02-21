@@ -20,6 +20,8 @@ export interface Channel {
     last_message_at?: string;
     team_id?: string;
     team_name?: string;
+    is_member?: boolean;
+    project_id?: number;
 }
 
 export interface Message {

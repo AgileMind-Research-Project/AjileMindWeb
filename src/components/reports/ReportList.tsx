@@ -134,7 +134,8 @@ export default function ReportList() {
     const styles = {
       daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       sprint_meeting: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      brainstorming: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
     };
 
     return (
@@ -187,6 +188,7 @@ export default function ReportList() {
                 <option value="daily_standup">Daily Standup</option>
                 <option value="sprint_meeting">Sprint Meeting</option>
                 <option value="retrospective">Retrospective</option>
+                <option value="brainstorming">Brainstorming</option>
               </select>
             </div>
 

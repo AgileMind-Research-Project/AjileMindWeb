@@ -298,6 +298,87 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
     </div>
   );
 
+  const renderBrainstormingEditor = () => (
+    <div className="space-y-6">
+      {/* Meeting Topic */}
+      <div>
+        <label className="block text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          Meeting Topic
+        </label>
+        <input
+          type="text"
+          value={editedContent?.meeting_topic || ""}
+          onChange={(e) => setEditedContent((prev: any) => ({ ...prev, meeting_topic: e.target.value }))}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+        />
+      </div>
+
+      {/* Meeting Objective */}
+      <div>
+        <label className="block text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          Meeting Objective
+        </label>
+        <textarea
+          value={editedContent?.meeting_objective || ""}
+          onChange={(e) => setEditedContent((prev: any) => ({ ...prev, meeting_objective: e.target.value }))}
+          rows={2}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+        />
+      </div>
+
+      {/* Summary */}
+      <div>
+        <label className="block text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          Summary
+        </label>
+        <textarea
+          value={editedContent?.summary || ""}
+          onChange={(e) => setEditedContent((prev: any) => ({ ...prev, summary: e.target.value }))}
+          rows={3}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+        />
+      </div>
+
+      {/* Array Fields */}
+      {["participants", "top_ideas", "categories", "key_themes", "decisions_made"].map((field) => (
+        <div key={field}>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </h3>
+            <button
+              type="button"
+              onClick={() => addArrayItem(field)}
+              className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add Item
+            </button>
+          </div>
+          <div className="space-y-2">
+            {editedContent?.[field]?.map((item: string, index: number) => (
+              <div key={index} className="flex gap-2">
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => updateArrayField(field, index, e.target.value)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeArrayItem(field, index)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6">
@@ -339,6 +420,7 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           {report.report_type === "daily_standup" && renderDailyStandupEditor()}
           {report.report_type === "sprint_meeting" && renderSprintMeetingEditor()}
           {report.report_type === "retrospective" && renderRetrospectiveEditor()}
+          {report.report_type === "brainstorming" && renderBrainstormingEditor()}
 
           {/* Error Message */}
           {error && (

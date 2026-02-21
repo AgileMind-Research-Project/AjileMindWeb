@@ -10,6 +10,7 @@ import React from 'react';
 import { Message } from '@/lib/store/chatStore';
 import { Avatar } from './Avatar';
 import { formatDistanceToNow } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 interface MessageBubbleProps {
     message: Message;
@@ -27,6 +28,7 @@ export function MessageBubble({
     onDelete,
 }: MessageBubbleProps) {
     const [showActions, setShowActions] = React.useState(false);
+    const router = useRouter();
 
     // Parse UTC timestamp and convert to local time for display
     // Backend sends UTC timestamps without 'Z' suffix, so we need to add it
@@ -34,6 +36,38 @@ export function MessageBubble({
     const utcTimestamp = message.created_at.endsWith('Z') ? message.created_at : `${message.created_at}Z`;
     const messageDate = new Date(utcTimestamp);
     const timeAgo = formatDistanceToNow(messageDate, { addSuffix: true });
+
+    // Function to render message content with clickable meeting links
+    const renderContentWithLinks = (content: string) => {
+        // Regex to match meeting links: /meetings/{meetingId}
+        const meetingLinkRegex = /(\/meetings\/[a-zA-Z0-9_-]+)/g;
+        const parts = content.split(meetingLinkRegex);
+
+        return parts.map((part, index) => {
+            if (part.match(meetingLinkRegex)) {
+                // This is a meeting link
+                return (
+                    <button
+                        key={`meeting-link-${part}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(part);
+                        }}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg font-semibold underline transition-all ${
+                            isOwn
+                                ? 'hover:bg-blue-500 text-white'
+                                : 'hover:bg-gray-200 text-blue-600'
+                        }`}
+                        title="Click to join meeting"
+                    >
+                        🎥 Join Meeting
+                    </button>
+                );
+            }
+            // Regular text
+            return <span key={`text-${index}-${part.substring(0, 20)}`}>{part}</span>;
+        });
+    };
 
     return (
         <div
@@ -76,7 +110,9 @@ export function MessageBubble({
                                 </div>
                             )}
 
-                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                            <p className="whitespace-pre-wrap break-words">
+                                {renderContentWithLinks(message.content)}
+                            </p>
 
                             {message.is_edited && (
                                 <span className="text-xs opacity-70 ml-2">(edited)</span>

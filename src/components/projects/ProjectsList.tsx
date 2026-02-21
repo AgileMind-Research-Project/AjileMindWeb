@@ -6,6 +6,7 @@ import PrioritizedBacklogModal from './PrioritizedBacklogModal';
 import SubtaskModal from './SubtaskModal';
 import AssigneeViewModal from './AssigneeViewModal';
 import { API_CONFIG } from '@/lib/config/api.config';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface Project {
   project_id: number;
@@ -61,12 +62,28 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [limit] = useState(10); // Decreased limit for better visual fit with more columns
+  const [limit] = useState(10);
   const [showBacklogModal, setShowBacklogModal] = useState(false);
   const [showPriorityModal, setShowPriorityModal] = useState(false);
   const [showAssigneeModal, setShowAssigneeModal] = useState(false);
   const [showSubtaskModal, setShowSubtaskModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const { user } = useAuth();
+
+  const getUserRoles = (): string[] => {
+    if (!user) return [];
+    if (Array.isArray(user.roles) && user.roles.length > 0) return user.roles;
+    if (user.role) {
+      if (typeof user.role === 'string' && user.role.startsWith('[')) {
+        try { return JSON.parse(user.role); } catch (e) { }
+      }
+      return [user.role];
+    }
+    return [];
+  };
+
+  const userRoles = getUserRoles();
+  const canManage = userRoles.some(r => ['PROJECT_MANAGER', 'PROJECT_LEAD', 'SUPER_ADMIN'].includes(r));
 
   const fetchProjects = async () => {
     setIsLoading(true);
@@ -204,7 +221,9 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Project Name</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead & Team</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Timeline</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  {canManage && (
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -294,73 +313,75 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
                     </td>
 
                     {/* Actions */}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
-                      <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => onEdit && onEdit(project)}
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
-                          title="Edit Project Details"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
+                    {canManage && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
+                        <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => onEdit && onEdit(project)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+                            title="Edit Project Details"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
 
-                        <div className="h-4 w-px bg-gray-200 mx-1"></div>
+                          <div className="h-4 w-px bg-gray-200 mx-1"></div>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowBacklogModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-all"
-                          title="Upload Backlog"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                          </svg>
-                        </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowBacklogModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-all"
+                            title="Upload Backlog"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                          </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowPriorityModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-all"
-                          title="Prioritize Backlog"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 3-2 3 2zm0 0c0 1.105 1.343 2 3 2s3-.895 3-2-3-2-3 2zM9 10l12-3" />
-                          </svg>
-                        </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowPriorityModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-all"
+                            title="Prioritize Backlog"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 3-2 3 2zm0 0c0 1.105 1.343 2 3 2s3-.895 3-2-3-2-3 2zM9 10l12-3" />
+                            </svg>
+                          </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowAssigneeModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-md transition-all"
-                          title="View Assignees & Priority"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowAssigneeModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-md transition-all"
+                            title="View Assignees & Priority"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                          </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowSubtaskModal(true);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-all"
-                          title="View Subtasks"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowSubtaskModal(true);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-all"
+                            title="View Subtasks"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -439,7 +460,6 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
           }}
         />
       )}
-
 
       {/* Assignee View Modal */}
       {showAssigneeModal && selectedProject && (

@@ -154,14 +154,16 @@ export default function TranscriptList() {
       daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
       sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      brainstorming: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
     };
 
     const labels = {
       daily_standup: "Daily Standup",
       sprint_planning: "Sprint Planning",
       sprint_meeting: "Sprint Meeting",
-      retrospective: "Retrospective"
+      retrospective: "Retrospective",
+      brainstorming: "Brainstorming"
     };
 
     return (
@@ -219,6 +221,7 @@ export default function TranscriptList() {
                 <option value="sprint_planning">Sprint Planning</option>
                 <option value="sprint_meeting">Sprint Meeting</option>
                 <option value="retrospective">Retrospective</option>
+                <option value="brainstorming">Brainstorming</option>
               </select>
             </div>
 
