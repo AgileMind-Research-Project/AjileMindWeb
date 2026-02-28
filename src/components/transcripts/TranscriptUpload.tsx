@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Calendar, Tag, X } from "lucide-react";
+import { Upload, FileText, Calendar, Tag, X, Briefcase } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 
 const API_BASE = 'http://localhost:8000';
+
+interface Project {
+  project_id: number;
+  project_name: string;
+  key: string;
+}
 
 export default function TranscriptUpload() {
   const router = useRouter();
@@ -18,13 +24,42 @@ export default function TranscriptUpload() {
     transcriptDate: new Date().toISOString().split('T')[0],
     tags: [] as string[],
     pastedContent: "",
+    projectId: "" as string,
   });
 
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newTag, setNewTag] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [uploadMethod, setUploadMethod] = useState<"file" | "paste">("file");
+
+  // Fetch user's assigned projects on mount
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!accessToken) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/projects/`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setProjects(data.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch projects:', err);
+      } finally {
+        setProjectsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, [accessToken]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -72,6 +107,11 @@ export default function TranscriptUpload() {
       formDataToSend.append("category", formData.category);
       formDataToSend.append("transcript_date", formData.transcriptDate);
       formDataToSend.append("tags", JSON.stringify(formData.tags));
+      
+      // Add project_id if selected
+      if (formData.projectId) {
+        formDataToSend.append("project_id", formData.projectId);
+      }
 
       if (uploadMethod === "file") {
         if (!selectedFile) {
@@ -158,6 +198,35 @@ export default function TranscriptUpload() {
               <option value="retrospective">Retrospective</option>
               <option value="brainstorming">Brainstorming</option>
             </select>
+          </div>
+
+          {/* Project */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Briefcase className="inline w-4 h-4 mr-2" />
+              Project *
+            </label>
+            <select
+              required
+              value={formData.projectId}
+              onChange={(e) => setFormData(prev => ({ ...prev, projectId: e.target.value }))}
+              disabled={projectsLoading}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+            >
+              <option value="">
+                {projectsLoading ? "Loading projects..." : "Select a project"}
+              </option>
+              {projects.map((project) => (
+                <option key={project.project_id} value={project.project_id}>
+                  {project.key} - {project.project_name}
+                </option>
+              ))}
+            </select>
+            {!projectsLoading && projects.length === 0 && (
+              <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
+                No projects assigned to you. Contact your administrator.
+              </p>
+            )}
           </div>
 
           {/* Date */}

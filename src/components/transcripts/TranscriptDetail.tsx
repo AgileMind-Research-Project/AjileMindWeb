@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Calendar, Tag, Edit, Trash2, FileBarChart, ChevronRight, Sparkles } from "lucide-react";
+import { FileText, Calendar, Tag, Edit, Trash2, FileBarChart, ChevronRight } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 import ReportGenerator from "../reports/ReportGenerator";
-import ParsedDataReviewModal from "../meetings/ParsedDataReviewModal";
 
 const API_BASE = 'http://localhost:8000';
 
@@ -47,7 +46,6 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [showParseModal, setShowParseModal] = useState(false);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
@@ -235,13 +233,6 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
                   Generate Report
                 </button>
                 <button
-                  onClick={() => setShowParseModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Parse with AI
-                </button>
-                <button
                   onClick={handleDelete}
                   className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
                 >
@@ -323,19 +314,6 @@ export default function TranscriptDetail({ transcriptId }: TranscriptDetailProps
             setShowGenerateModal(false);
             fetchReports();
             router.push(`/reports/${reportId}`);
-          }}
-        />
-      )}
-
-      {/* Parse Data Modal */}
-      {showParseModal && (
-        <ParsedDataReviewModal
-          transcriptId={transcriptId}
-          projectId={(transcript as any).project_id}
-          onClose={() => setShowParseModal(false)}
-          onSyncComplete={() => {
-            setShowParseModal(false);
-            fetchReports(); // Refresh reports or other data if needed
           }}
         />
       )}

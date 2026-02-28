@@ -521,6 +521,17 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
           </div>
         </div>
 
+        {/* Header Image */}
+        {report.report_content?.header_image && (
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <img 
+              src={report.report_content.header_image} 
+              alt="Report Header" 
+              className="w-full max-h-48 object-contain rounded-lg"
+            />
+          </div>
+        )}
+
         {/* Report Content */}
         <div className="p-8">
           {report.report_type === "daily_standup" && renderDailyStandup(report.report_content)}
@@ -528,6 +539,17 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
           {report.report_type === "retrospective" && renderRetrospective(report.report_content)}
           {report.report_type === "brainstorming" && renderBrainstorming(report.report_content)}
         </div>
+
+        {/* Footer Image */}
+        {report.report_content?.footer_image && (
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+            <img 
+              src={report.report_content.footer_image} 
+              alt="Report Footer" 
+              className="w-full max-h-48 object-contain rounded-lg"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Save, X, Plus, Trash2, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Save, X, Plus, Trash2, Loader2, ImagePlus, Image } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 
 const API_BASE = 'http://localhost:8000';
@@ -21,6 +21,12 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  
+  // Header and Footer Images
+  const [headerImage, setHeaderImage] = useState<string | null>(null);
+  const [footerImage, setFooterImage] = useState<string | null>(null);
+  const headerInputRef = useRef<HTMLInputElement>(null);
+  const footerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (hasHydrated && accessToken) {
@@ -46,6 +52,14 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
       const data = await response.json();
       setReport(data);
       setEditedContent(JSON.parse(JSON.stringify(data.report_content))); // Deep clone
+      
+      // Load existing header/footer images from report content
+      if (data.report_content?.header_image) {
+        setHeaderImage(data.report_content.header_image);
+      }
+      if (data.report_content?.footer_image) {
+        setFooterImage(data.report_content.footer_image);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load report");
     } finally {
@@ -65,10 +79,17 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
       
+      // Include header/footer images in the content
+      const contentWithImages = {
+        ...editedContent,
+        header_image: headerImage,
+        footer_image: footerImage,
+      };
+      
       const response = await fetch(`${API_BASE}/api/v1/reports/${reportId}`, {
         method: "PUT",
         headers,
-        body: JSON.stringify(editedContent),
+        body: JSON.stringify(contentWithImages),
       });
 
       if (!response.ok) {
@@ -103,6 +124,138 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
       [field]: prev[field].filter((_: any, i: number) => i !== index)
     }));
   };
+
+  // Image upload handler
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'header' | 'footer') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image size must be less than 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (type === 'header') {
+        setHeaderImage(base64);
+      } else {
+        setFooterImage(base64);
+      }
+    };
+    reader.onerror = () => {
+      setError('Failed to read image file');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Render Header/Footer Image Section
+  const renderImageUploadSection = () => (
+    <div className="mb-8 p-6 bg-gray-50 dark:bg-gray-900 rounded-lg">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        Report Header & Footer Images
+      </h3>
+      <div className="grid grid-cols-2 gap-6">
+        {/* Header Image */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Header Image
+          </label>
+          <div 
+            onClick={() => headerInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+          >
+            {headerImage ? (
+              <div className="relative">
+                <img 
+                  src={headerImage} 
+                  alt="Header Preview" 
+                  className="max-h-32 mx-auto rounded"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setHeaderImage(null); }}
+                  className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="py-4">
+                <ImagePlus className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Click to upload header image
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  PNG, JPG up to 2MB
+                </p>
+              </div>
+            )}
+          </div>
+          <input
+            ref={headerInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => handleImageUpload(e, 'header')}
+            className="hidden"
+          />
+        </div>
+
+        {/* Footer Image */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Footer Image
+          </label>
+          <div 
+            onClick={() => footerInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+          >
+            {footerImage ? (
+              <div className="relative">
+                <img 
+                  src={footerImage} 
+                  alt="Footer Preview" 
+                  className="max-h-32 mx-auto rounded"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setFooterImage(null); }}
+                  className="absolute top-0 right-0 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="py-4">
+                <ImagePlus className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Click to upload footer image
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  PNG, JPG up to 2MB
+                </p>
+              </div>
+            )}
+          </div>
+          <input
+            ref={footerInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => handleImageUpload(e, 'footer')}
+            className="hidden"
+          />
+        </div>
+      </div>
+    </div>
+  );
 
   const renderDailyStandupEditor = () => (
     <div className="space-y-6">
@@ -417,6 +570,9 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
 
         {/* Editor Form */}
         <div className="p-8">
+          {/* Header & Footer Images */}
+          {renderImageUploadSection()}
+          
           {report.report_type === "daily_standup" && renderDailyStandupEditor()}
           {report.report_type === "sprint_meeting" && renderSprintMeetingEditor()}
           {report.report_type === "retrospective" && renderRetrospectiveEditor()}
