@@ -18,7 +18,7 @@ interface Report {
   template_id: number | null;
   version: number;
   status: string;
-  generated_at: string;
+  created_at: string;
   updated_at: string;
 }
 
@@ -184,14 +184,20 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
 
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Progress Summary</h3>
-        <ul className="space-y-2 ml-7">
-          {content.progress_summary?.map((item: string, index: number) => (
-            <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-              <span className="text-green-600 mt-1">•</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+        {Array.isArray(content.progress_summary) ? (
+          <ul className="space-y-2 ml-7">
+            {content.progress_summary.map((item: string, index: number) => (
+              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                <span className="text-green-600 mt-1">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            {content.progress_summary || "No progress summary available."}
+          </p>
+        )}
       </div>
 
       <div>
@@ -404,10 +410,17 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
         <div>
           <h3 className="text-lg font-semibold text-indigo-700 dark:text-indigo-400 mb-3">✅ Decisions Made</h3>
           <ul className="space-y-2 ml-7">
-            {content.decisions_made.map((decision: string, index: number) => (
+            {content.decisions_made.map((decision: any, index: number) => (
               <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
                 <span className="text-indigo-600 mt-1">•</span>
-                <span>{decision}</span>
+                <span>
+                  {typeof decision === 'string' ? decision : decision.decision}
+                  {typeof decision === 'object' && decision.assignee && (
+                    <span className="ml-2 text-sm text-indigo-600 dark:text-indigo-400">
+                      (Assignee: {decision.assignee})
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
@@ -480,7 +493,7 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
-                  Generated {new Date(report.generated_at).toLocaleDateString()}
+                  Generated {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'N/A'}
                 </span>
                 <span>•</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
