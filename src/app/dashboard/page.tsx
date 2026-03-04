@@ -126,6 +126,42 @@ export default function DashboardPage() {
             </div>
           </button>
 
+          {/* New Tasks - For All Users */}
+          <button
+            onClick={() => router.push('/new-tasks')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">New Tasks</h3>
+                <p className="text-sm text-gray-600">From brainstorming</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Recurring Bugs - For All Users */}
+          <button
+            onClick={() => router.push('/recurring-bugs')}
+            className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow text-left border border-gray-200"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Recurring Bugs</h3>
+                <p className="text-sm text-gray-600">From retrospectives</p>
+              </div>
+            </div>
+          </button>
+
           {/* Admin/Super Admin Quick Actions */}
           {(user?.roles?.includes('SUPER_ADMIN') || user?.roles?.includes('ADMIN')) && (
             <>

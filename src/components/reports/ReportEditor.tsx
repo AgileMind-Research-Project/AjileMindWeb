@@ -493,7 +493,7 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
       </div>
 
       {/* Array Fields */}
-      {["participants", "top_ideas", "categories", "key_themes", "decisions_made"].map((field) => (
+      {["participants", "top_ideas", "categories", "key_themes"].map((field) => (
         <div key={field}>
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -529,6 +529,70 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </div>
         </div>
       ))}
+
+      {/* Decisions Made - with decision and assignee fields */}
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Decisions Made
+          </h3>
+          <button
+            type="button"
+            onClick={() => setEditedContent((prev: any) => ({
+              ...prev,
+              decisions_made: [...(prev.decisions_made || []), { decision: '', assignee: '' }]
+            }))}
+            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Decision
+          </button>
+        </div>
+        <div className="space-y-3">
+          {editedContent?.decisions_made?.map((item: any, index: number) => (
+            <div key={index} className="flex gap-2 items-start bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  placeholder="Decision"
+                  value={typeof item === 'string' ? item : (item.decision || '')}
+                  onChange={(e) => setEditedContent((prev: any) => {
+                    const updated = [...prev.decisions_made];
+                    updated[index] = typeof item === 'string' 
+                      ? { decision: e.target.value, assignee: '' }
+                      : { ...item, decision: e.target.value };
+                    return { ...prev, decisions_made: updated };
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+                />
+                <input
+                  type="text"
+                  placeholder="Assignee (optional)"
+                  value={typeof item === 'string' ? '' : (item.assignee || '')}
+                  onChange={(e) => setEditedContent((prev: any) => {
+                    const updated = [...prev.decisions_made];
+                    updated[index] = typeof item === 'string'
+                      ? { decision: item, assignee: e.target.value }
+                      : { ...item, assignee: e.target.value };
+                    return { ...prev, decisions_made: updated };
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditedContent((prev: any) => ({
+                  ...prev,
+                  decisions_made: prev.decisions_made.filter((_: any, i: number) => i !== index)
+                }))}
+                className="text-red-600 hover:text-red-700 mt-2"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 

@@ -17,7 +17,7 @@ interface Report {
   template_id: number | null;
   version: number;
   status: string;
-  generated_at: string;
+  created_at: string;
   updated_at: string;
 }
 
@@ -280,7 +280,7 @@ export default function ReportList() {
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                             <Calendar className="inline w-4 h-4 mr-1" />
-                            {new Date(report.generated_at).toLocaleDateString()}
+                            {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'N/A'}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex gap-2">
