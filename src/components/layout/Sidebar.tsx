@@ -141,7 +141,7 @@ export default function Sidebar() {
       )
     },
     {
-      label: 'Document Chatbot',
+      label: 'Report Chatbot',
       path: '/chatbot',
       roles: ['USER', 'DEVELOPER', 'PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
       icon: (

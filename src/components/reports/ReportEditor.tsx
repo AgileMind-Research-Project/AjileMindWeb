@@ -104,25 +104,46 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
     }
   };
 
+  // Helper to ensure field is an array
+  const ensureArray = (value: any): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) return [value];
+    return [];
+  };
+
   const updateArrayField = (field: string, index: number, value: string) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: prev[field].map((item: any, i: number) => i === index ? value : item)
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: arr.map((item: any, i: number) => i === index ? value : item)
+      };
+    });
   };
 
   const addArrayItem = (field: string) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: [...(prev[field] || []), ""]
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: [...arr, ""]
+      };
+    });
   };
 
   const removeArrayItem = (field: string, index: number) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: prev[field].filter((_: any, i: number) => i !== index)
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: arr.filter((_: any, i: number) => i !== index)
+      };
+    });
+  };
+
+  // Helper to get array for rendering
+  const getArrayField = (field: string): any[] => {
+    return ensureArray(editedContent?.[field]);
   };
 
   // Image upload handler
@@ -275,11 +296,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.yesterday_work?.map((item: string, index: number) => (
+          {getArrayField("yesterday_work").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("yesterday_work", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -311,11 +332,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.today_plan?.map((item: string, index: number) => (
+          {getArrayField("today_plan").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("today_plan", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -347,11 +368,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.blockers?.map((item: string, index: number) => (
+          {getArrayField("blockers").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("blockers", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -387,11 +408,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -428,11 +449,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -509,11 +530,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -549,7 +570,7 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-3">
-          {editedContent?.decisions_made?.map((item: any, index: number) => (
+          {getArrayField("decisions_made").map((item: any, index: number) => (
             <div key={index} className="flex gap-2 items-start bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
               <div className="flex-1 space-y-2">
                 <input

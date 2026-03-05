@@ -12,7 +12,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Upload, File, FileText, Trash2, AlertCircle, CheckCircle2, Loader } from 'lucide-react';
+import { Upload, File, FileText, Trash2, AlertCircle, CheckCircle2, Loader, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/auth.store';
 
 interface UploadedDocument {
@@ -27,7 +27,7 @@ export default function DocumentUpload() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('general');
+  const [category, setCategory] = useState('daily_standup');
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -37,6 +37,7 @@ export default function DocumentUpload() {
   });
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [isDocumentsExpanded, setIsDocumentsExpanded] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch uploaded documents on mount
@@ -206,12 +207,10 @@ export default function DocumentUpload() {
   };
 
   const categories = [
-    { value: 'general', label: 'General' },
-    { value: 'documentation', label: 'Documentation' },
-    { value: 'requirements', label: 'Requirements' },
-    { value: 'design', label: 'Design' },
-    { value: 'research', label: 'Research' },
-    { value: 'meeting', label: 'Meeting Notes' },
+    { value: 'daily_standup', label: 'Daily Standup' },
+    { value: 'sprint_meeting', label: 'Sprint Meeting' },
+    { value: 'retrospective', label: 'Retrospective' },
+    { value: 'brainstorming', label: 'Brainstorming' },
   ];
 
   return (
@@ -376,56 +375,71 @@ export default function DocumentUpload() {
 
       {/* Documents List Section */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <button
+          onClick={() => setIsDocumentsExpanded(!isDocumentsExpanded)}
+          className="w-full px-6 py-4 border-b border-gray-200 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        >
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
             <FileText className="w-5 h-5 text-purple-600" />
             Uploaded Documents
+            {uploadedDocuments.length > 0 && (
+              <span className="text-sm font-normal text-gray-500">({uploadedDocuments.length})</span>
+            )}
           </h3>
-        </div>
+          {isDocumentsExpanded ? (
+            <ChevronUp className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-500" />
+          )}
+        </button>
 
-        {loadingDocuments ? (
-          <div className="px-6 py-8 text-center">
-            <Loader className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-            <p className="text-gray-600 mt-2">Loading documents...</p>
-          </div>
-        ) : uploadedDocuments.length === 0 ? (
-          <div className="px-6 py-8 text-center text-gray-600">
-            <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-            <p>No documents uploaded yet</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {uploadedDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
-              >
-                <div className="flex-1">
-                  <h4 className="font-medium text-gray-900">{doc.doc_title}</h4>
-                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                    {doc.category && (
-                      <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-700">
-                        {doc.category}
-                      </span>
-                    )}
-                    <span>Uploaded: {new Date(doc.uploaded_date).toLocaleDateString()}</span>
-                    {!doc.is_active && (
-                      <span className="text-red-600 italic">Deleted</span>
+        {isDocumentsExpanded && (
+          <>
+            {loadingDocuments ? (
+              <div className="px-6 py-8 text-center">
+                <Loader className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+                <p className="text-gray-600 mt-2">Loading documents...</p>
+              </div>
+            ) : uploadedDocuments.length === 0 ? (
+              <div className="px-6 py-8 text-center text-gray-600">
+                <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                <p>No documents uploaded yet</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {uploadedDocuments.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900">{doc.doc_title}</h4>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                        {doc.category && (
+                          <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-700">
+                            {doc.category}
+                          </span>
+                        )}
+                        <span>Uploaded: {new Date(doc.uploaded_date).toLocaleDateString()}</span>
+                        {!doc.is_active && (
+                          <span className="text-red-600 italic">Deleted</span>
+                        )}
+                      </div>
+                    </div>
+                    {doc.is_active && (
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete document"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     )}
                   </div>
-                </div>
-                {doc.is_active && (
-                  <button
-                    onClick={() => handleDeleteDocument(doc.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete document"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
