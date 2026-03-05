@@ -17,11 +17,23 @@ export function useChat(channelId: string | null, enabled: boolean = true) {
     const addTypingUser = useChatStore((state) => state.addTypingUser);
     const removeTypingUser = useChatStore((state) => state.removeTypingUser);
 
-    // Connect to WebSocket
+    // Connect to WebSocket - read token from auth-storage (Zustand) first, then fallback
     useEffect(() => {
         if (!enabled || !channelId) return;
 
-        const token = localStorage.getItem('access_token');
+        let token: string | null = null;
+        try {
+            const authStorage = localStorage.getItem('auth-storage');
+            if (authStorage) {
+                const parsed = JSON.parse(authStorage);
+                token = parsed.state?.accessToken || null;
+            }
+        } catch (e) { /* ignore */ }
+
+        if (!token) {
+            token = localStorage.getItem('access_token');
+        }
+
         if (!token) return;
 
         const wsUrl = getWebSocketURL('chat', channelId);

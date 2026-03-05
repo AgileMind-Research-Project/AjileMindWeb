@@ -7,14 +7,17 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChatStore, Channel } from '@/lib/store/chatStore';
 import { Avatar } from './Avatar';
 
 interface ChannelSidebarProps {
     onCreateChannel?: () => void;
+    onBack?: () => void;
 }
 
-export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
+export function ChannelSidebar({ onCreateChannel, onBack }: ChannelSidebarProps) {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const channels = useChatStore((state) => state.channels);
     const activeChannelId = useChatStore((state) => state.activeChannelId);
@@ -76,39 +79,57 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
     return (
         <div className="flex flex-col h-full bg-white border-r border-gray-200">
             {/* Header */}
-            <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900">Channels</h2>
-                    {onCreateChannel && (
-                        <button
-                            onClick={onCreateChannel}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Create channel"
-                        >
-                            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <div className="border-b border-gray-200">
+                {/* Back Button Row */}
+                <div className="px-3 pt-3 pb-2">
+                    <button
+                        onClick={() => onBack ? onBack() : router.push('/dashboard')}
+                        className="group flex items-center gap-2 px-3 py-2 w-full rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200"
+                        title="Back to main menu"
+                    >
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 group-hover:bg-blue-100 transition-colors duration-200">
+                            <svg className="w-3.5 h-3.5 text-gray-500 group-hover:text-blue-600 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                             </svg>
-                        </button>
-                    )}
+                        </span>
+                        <span className="text-sm font-medium">Back to Dashboard</span>
+                    </button>
                 </div>
 
-                {/* Search */}
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder="Search channels..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <svg
-                        className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                <div className="px-4 pb-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-gray-900">Channels</h2>
+                        {onCreateChannel && (
+                            <button
+                                onClick={onCreateChannel}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Create channel"
+                            >
+                                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Search */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search channels..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <svg
+                            className="absolute left-3 top-2.5 w-5 h-5 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
                 </div>
             </div>
 
@@ -132,8 +153,8 @@ export function ChannelSidebar({ onCreateChannel }: ChannelSidebarProps) {
                             <div key={teamName}>
                                 {/* Team / Project Label */}
                                 <div className={`px-4 py-3 border-b ${group.isProject
-                                        ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100'
-                                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100'
+                                    ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100'
+                                    : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100'
                                     }`}>
                                     <div className="flex items-center gap-2">
                                         {group.isProject ? (

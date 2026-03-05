@@ -169,7 +169,16 @@ export default function Sidebar() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       )
-
+    },
+    {
+      label: 'Project Events',
+      path: '/dashboard/project-events',
+      roles: ['USER', 'DEVELOPER', 'PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
+        </svg>
+      )
     }
   ];
 
@@ -201,6 +210,16 @@ export default function Sidebar() {
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )
+    },
+    {
+      label: 'Project Events',
+      path: '/dashboard/project-events',
+      roles: ['USER', 'DEVELOPER', 'PROJECT_MANAGER', 'ADMIN', 'SUPER_ADMIN'],
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       )
     }
@@ -287,7 +306,7 @@ export default function Sidebar() {
 
                   return (
                     <Link
-                      key={subItem.path}
+                      key={subItem.label + subItem.path}
                       href={subItem.path}
                       className={`
                         flex items-center space-x-3 px-4 py-2.5 rounded-md transition-all duration-200 text-sm
@@ -326,7 +345,7 @@ export default function Sidebar() {
 
           return (
             <Link
-              key={item.path}
+              key={item.label + item.path}
               href={item.path}
               className={`
               flex items-center space-x-3 px-4 py-3 rounded-md transition-all duration-200
