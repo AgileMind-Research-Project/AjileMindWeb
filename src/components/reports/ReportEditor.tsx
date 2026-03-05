@@ -104,25 +104,46 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
     }
   };
 
+  // Helper to ensure field is an array
+  const ensureArray = (value: any): any[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) return [value];
+    return [];
+  };
+
   const updateArrayField = (field: string, index: number, value: string) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: prev[field].map((item: any, i: number) => i === index ? value : item)
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: arr.map((item: any, i: number) => i === index ? value : item)
+      };
+    });
   };
 
   const addArrayItem = (field: string) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: [...(prev[field] || []), ""]
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: [...arr, ""]
+      };
+    });
   };
 
   const removeArrayItem = (field: string, index: number) => {
-    setEditedContent((prev: any) => ({
-      ...prev,
-      [field]: prev[field].filter((_: any, i: number) => i !== index)
-    }));
+    setEditedContent((prev: any) => {
+      const arr = ensureArray(prev[field]);
+      return {
+        ...prev,
+        [field]: arr.filter((_: any, i: number) => i !== index)
+      };
+    });
+  };
+
+  // Helper to get array for rendering
+  const getArrayField = (field: string): any[] => {
+    return ensureArray(editedContent?.[field]);
   };
 
   // Image upload handler
@@ -275,11 +296,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.yesterday_work?.map((item: string, index: number) => (
+          {getArrayField("yesterday_work").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("yesterday_work", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -311,11 +332,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.today_plan?.map((item: string, index: number) => (
+          {getArrayField("today_plan").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("today_plan", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -347,11 +368,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </button>
         </div>
         <div className="space-y-2">
-          {editedContent?.blockers?.map((item: string, index: number) => (
+          {getArrayField("blockers").map((item: string, index: number) => (
             <div key={index} className="flex gap-2">
               <input
                 type="text"
-                value={item}
+                value={item || ''}
                 onChange={(e) => updateArrayField("blockers", index, e.target.value)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               />
@@ -387,11 +408,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -428,11 +449,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -493,7 +514,7 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
       </div>
 
       {/* Array Fields */}
-      {["participants", "top_ideas", "categories", "key_themes", "decisions_made"].map((field) => (
+      {["participants", "top_ideas", "categories", "key_themes"].map((field) => (
         <div key={field}>
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -509,11 +530,11 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
             </button>
           </div>
           <div className="space-y-2">
-            {editedContent?.[field]?.map((item: string, index: number) => (
+            {getArrayField(field).map((item: string, index: number) => (
               <div key={index} className="flex gap-2">
                 <input
                   type="text"
-                  value={item}
+                  value={item || ''}
                   onChange={(e) => updateArrayField(field, index, e.target.value)}
                   className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -529,6 +550,70 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           </div>
         </div>
       ))}
+
+      {/* Decisions Made - with decision and assignee fields */}
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Decisions Made
+          </h3>
+          <button
+            type="button"
+            onClick={() => setEditedContent((prev: any) => ({
+              ...prev,
+              decisions_made: [...(prev.decisions_made || []), { decision: '', assignee: '' }]
+            }))}
+            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Decision
+          </button>
+        </div>
+        <div className="space-y-3">
+          {getArrayField("decisions_made").map((item: any, index: number) => (
+            <div key={index} className="flex gap-2 items-start bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  placeholder="Decision"
+                  value={typeof item === 'string' ? item : (item.decision || '')}
+                  onChange={(e) => setEditedContent((prev: any) => {
+                    const updated = [...prev.decisions_made];
+                    updated[index] = typeof item === 'string' 
+                      ? { decision: e.target.value, assignee: '' }
+                      : { ...item, decision: e.target.value };
+                    return { ...prev, decisions_made: updated };
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+                />
+                <input
+                  type="text"
+                  placeholder="Assignee (optional)"
+                  value={typeof item === 'string' ? '' : (item.assignee || '')}
+                  onChange={(e) => setEditedContent((prev: any) => {
+                    const updated = [...prev.decisions_made];
+                    updated[index] = typeof item === 'string'
+                      ? { decision: item, assignee: e.target.value }
+                      : { ...item, assignee: e.target.value };
+                    return { ...prev, decisions_made: updated };
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditedContent((prev: any) => ({
+                  ...prev,
+                  decisions_made: prev.decisions_made.filter((_: any, i: number) => i !== index)
+                }))}
+                className="text-red-600 hover:text-red-700 mt-2"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 

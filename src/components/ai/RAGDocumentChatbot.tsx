@@ -1,11 +1,11 @@
 /**
- * RAG Document Chatbot Component
+ * RAG Report Chatbot Component
  * 
  * Comprehensive component for:
- * - Date picker for selecting document upload dates
- * - Document selector dropdown filtered by selected date
+ * - Date picker for selecting report dates
+ * - Report selector dropdown filtered by selected date
  * - Chatbot interface with message history
- * - RAG-based question answering from selected document
+ * - RAG-based question answering from selected report
  */
 
 'use client';
@@ -18,7 +18,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8
 const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || 'v1';
 
 // Local hook implementations
-const useDocumentDates = (accessToken: string | null) => {
+const useReportDates = (accessToken: string | null) => {
   const [dates, setDates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,20 +53,20 @@ const useDocumentDates = (accessToken: string | null) => {
   return { dates, loading, error };
 };
 
-const useDocumentsByDate = (selectedDate: string, accessToken: string | null) => {
-  const [documents, setDocuments] = useState<any[]>([]);
+const useReportsByDate = (selectedDate: string, accessToken: string | null) => {
+  const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
-      setDocuments([]);
+      setReports([]);
       return;
     }
 
-    // If "all" is selected or no date, fetch all documents
+    // If "all" is selected or no date, fetch all reports
     if (selectedDate === 'all' || !selectedDate) {
-      const fetchAllDocuments = async () => {
+      const fetchAllReports = async () => {
         setLoading(true);
         try {
           const headers: HeadersInit = {};
@@ -75,27 +75,27 @@ const useDocumentsByDate = (selectedDate: string, accessToken: string | null) =>
           }
 
           const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/documents?limit=1000`, { headers });
-          if (!response.ok) throw new Error('Failed to fetch documents');
+          if (!response.ok) throw new Error('Failed to fetch reports');
           const data = await response.json();
-          setDocuments(data);
+          setReports(data);
           setError(null);
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'Error fetching documents');
-          setDocuments([]);
+          setError(err instanceof Error ? err.message : 'Error fetching reports');
+          setReports([]);
         } finally {
           setLoading(false);
         }
       };
 
       if (selectedDate === 'all') {
-        fetchAllDocuments();
+        fetchAllReports();
       } else {
-        setDocuments([]);
+        setReports([]);
       }
       return;
     }
 
-    const fetchDocuments = async () => {
+    const fetchReports = async () => {
       setLoading(true);
       try {
         const headers: HeadersInit = {};
@@ -104,30 +104,30 @@ const useDocumentsByDate = (selectedDate: string, accessToken: string | null) =>
         }
 
         const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/documents?date=${encodeURIComponent(selectedDate)}`, { headers });
-        if (!response.ok) throw new Error('Failed to fetch documents');
+        if (!response.ok) throw new Error('Failed to fetch reports');
         const data = await response.json();
-        setDocuments(data);
+        setReports(data);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error fetching documents');
-        setDocuments([]);
+        setError(err instanceof Error ? err.message : 'Error fetching reports');
+        setReports([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDocuments();
+    fetchReports();
   }, [selectedDate, accessToken]);
 
-  return { documents, loading, error };
+  return { reports, loading, error };
 };
 
-const useChatWithDocument = (accessToken: string | null) => {
+const useChatWithReport = (accessToken: string | null) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Chat with specific document or search all documents
-  const chat = async (documentId: number | null, query: string, searchAll: boolean = false) => {
+  // Chat with specific report or search reports (optionally filtered by date)
+  const chat = async (reportId: number | null, query: string, searchAll: boolean = false, filterDate: string | null = null) => {
     setLoading(true);
     setError(null);
     try {
@@ -138,18 +138,22 @@ const useChatWithDocument = (accessToken: string | null) => {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
-      // Build request body based on whether we're searching all or specific document
+      // Build request body based on whether we're searching all or specific report
       const requestBody: any = { query };
       
       if (searchAll) {
         requestBody.search_all = true;
         requestBody.document_id = null;
-      } else if (documentId !== null) {
-        requestBody.document_id = documentId;
+        // Only pass filter_date if we're searching within a specific date
+        if (filterDate && filterDate !== 'all') {
+          requestBody.filter_date = filterDate;
+        }
+      } else if (reportId !== null) {
+        requestBody.document_id = reportId;
         requestBody.search_all = false;
       }
 
-      const response = await fetch('/api/v1/documents/chat', {
+      const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/documents/chat`, {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),
@@ -174,11 +178,11 @@ interface Message {
   type: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  documentId?: number;
-  sourceDocument?: string;
+  reportId?: number;
+  sourceReport?: string;
 }
 
-interface Document {
+interface Report {
   id: number;
   doc_title: string;
   uploaded_date: string;
@@ -186,14 +190,14 @@ interface Document {
   created_at: string;
 }
 
-interface DocumentDate {
+interface ReportDate {
   uploaded_date: string;
   count: number;
 }
 
 export default function RAGDocumentChatbot() {
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedDocument, setSelectedDocument] = useState<string>(''); // Changed to string to handle 'all'
+  const [selectedReport, setSelectedReport] = useState<string>(''); // Changed to string to handle 'all'
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -203,9 +207,9 @@ export default function RAGDocumentChatbot() {
   const { accessToken } = useAuthStore();
 
   // API hooks
-  const { dates: availableDates, loading: datesLoading, error: datesError } = useDocumentDates(accessToken);
-  const { documents, loading: docsLoading, error: docsError } = useDocumentsByDate(selectedDate, accessToken);
-  const { chat, loading: chatLoading, error: chatError } = useChatWithDocument(accessToken);
+  const { dates: availableDates, loading: datesLoading, error: datesError } = useReportDates(accessToken);
+  const { reports, loading: reportsLoading, error: reportsError } = useReportsByDate(selectedDate, accessToken);
+  const { chat, loading: chatLoading, error: chatError } = useChatWithReport(accessToken);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -216,28 +220,31 @@ export default function RAGDocumentChatbot() {
   const handleDateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const date = e.target.value;
     setSelectedDate(date);
-    setSelectedDocument('');
+    setSelectedReport('');
     setMessages([]); // Clear chat when changing date
   };
 
-  // Handle document selection
-  const handleDocumentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  // Handle report selection
+  const handleReportChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
-    setSelectedDocument(value);
-    setMessages([]); // Clear chat when changing document
+    setSelectedReport(value);
+    setMessages([]); // Clear chat when changing report
   };
 
-  // Check if we should search all documents
-  const isSearchAll = selectedDocument === 'all' || selectedDate === 'all';
-  const selectedDocId = selectedDocument && selectedDocument !== 'all' ? parseInt(selectedDocument) : null;
+  // Check if we should search multiple reports (not a specific one)
+  // isSearchAll is true when "All Reports" is selected
+  const isSearchAll = selectedReport === 'all';
+  // isGlobalSearch is true when both "All Dates" AND "All Reports" are selected
+  const isGlobalSearch = selectedDate === 'all' && selectedReport === 'all';
+  const selectedReportId = selectedReport && selectedReport !== 'all' ? parseInt(selectedReport) : null;
 
   // Handle sending message
   const handleSendQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Allow sending if we have a specific document OR if search all is enabled
+    // Allow sending if we have a specific report OR if search all is enabled
     if (!query.trim() || chatLoading) return;
-    if (!isSearchAll && !selectedDocId) return;
+    if (!isSearchAll && !selectedReportId) return;
 
     // Add user message to chat
     const userMessage: Message = {
@@ -245,7 +252,7 @@ export default function RAGDocumentChatbot() {
       type: 'user',
       content: query,
       timestamp: new Date(),
-      documentId: selectedDocId ?? undefined,
+      reportId: selectedReportId ?? undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -253,8 +260,9 @@ export default function RAGDocumentChatbot() {
     setLoading(true);
 
     try {
-      // Send query to backend - pass searchAll flag
-      const response = await chat(selectedDocId, query, isSearchAll);
+      // Send query to backend - pass searchAll flag and filterDate when not global search
+      const filterDate = isSearchAll && !isGlobalSearch ? selectedDate : null;
+      const response = await chat(selectedReportId, query, isSearchAll, filterDate);
       
       // Build response message with source info if searching all
       let responseContent = response.chatbot_response;
@@ -268,8 +276,8 @@ export default function RAGDocumentChatbot() {
         type: 'assistant',
         content: responseContent,
         timestamp: new Date(),
-        documentId: response.document_id,
-        sourceDocument: response.source_document,
+        reportId: response.document_id,
+        sourceReport: response.source_document,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -287,9 +295,9 @@ export default function RAGDocumentChatbot() {
     }
   };
 
-  const selectedDocTitle = selectedDocument === 'all' 
-    ? 'All Documents' 
-    : documents?.find(d => d.id === selectedDocId)?.doc_title;
+  const selectedReportTitle = selectedReport === 'all' 
+    ? 'All Reports' 
+    : reports?.find(d => d.id === selectedReportId)?.doc_title;
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg shadow-lg overflow-hidden">
@@ -297,9 +305,9 @@ export default function RAGDocumentChatbot() {
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 shadow-md">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileText className="w-6 h-6" />
-          Document Chatbot
+          Report Chatbot
         </h1>
-        <p className="text-blue-100 mt-2">Ask questions about your documents using AI</p>
+        <p className="text-blue-100 mt-2">Ask questions about your reports using AI</p>
       </div>
 
       {/* Main Content */}
@@ -311,7 +319,7 @@ export default function RAGDocumentChatbot() {
             <div className="flex-1">
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <Calendar className="w-4 h-4 inline mr-2" />
-                Select Document Date
+                Select Report Date
               </label>
               <select
                 value={selectedDate}
@@ -320,10 +328,10 @@ export default function RAGDocumentChatbot() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Choose a date...</option>
-                <option value="all" className="font-semibold text-blue-600">All Dates (Search All Documents)</option>
+                <option value="all" className="font-semibold text-blue-600">All Dates (Search All Reports)</option>
                 {availableDates?.map((dateObj) => (
                   <option key={dateObj.uploaded_date} value={dateObj.uploaded_date}>
-                    {new Date(dateObj.uploaded_date).toLocaleDateString()} ({dateObj.count} documents)
+                    {new Date(dateObj.uploaded_date).toLocaleDateString()} ({dateObj.count} reports)
                   </option>
                 ))}
               </select>
@@ -335,30 +343,30 @@ export default function RAGDocumentChatbot() {
               )}
             </div>
 
-            {/* Document Selector */}
+            {/* Report Selector */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 <FileText className="w-4 h-4 inline mr-2" />
-                Select Document
+                Select Report
               </label>
               <select
-                value={selectedDocument}
-                onChange={handleDocumentChange}
-                disabled={!selectedDate || docsLoading}
+                value={selectedReport}
+                onChange={handleReportChange}
+                disabled={!selectedDate || reportsLoading}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
               >
-                <option value="">Choose a document...</option>
-                <option value="all" className="font-semibold text-blue-600">All Documents (Search All)</option>
-                {documents?.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.doc_title}
+                <option value="">Choose a report...</option>
+                <option value="all" className="font-semibold text-blue-600">All Reports (Search All)</option>
+                {reports?.map((report) => (
+                  <option key={report.id} value={report.id}>
+                    {report.doc_title}
                   </option>
                 ))}
               </select>
-              {docsError && (
+              {reportsError && (
                 <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
-                  {docsError}
+                  {reportsError}
                 </p>
               )}
               {!selectedDate && (
@@ -367,13 +375,14 @@ export default function RAGDocumentChatbot() {
             </div>
           </div>
 
-          {/* Selected Document Info */}
-          {selectedDocTitle && (
+          {/* Selected Report Info */}
+          {selectedReportTitle && (
             <div className={`flex items-center gap-2 p-3 border rounded-lg ${isSearchAll ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
               <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${isSearchAll ? 'text-green-600' : 'text-blue-600'}`} />
               <span className={`text-sm ${isSearchAll ? 'text-green-900' : 'text-blue-900'}`}>
-                <strong>{isSearchAll ? 'Search Mode:' : 'Current:'}</strong> {selectedDocTitle}
-                {isSearchAll && <span className="ml-2 text-xs text-green-700">(Will search all documents and find the relevant one)</span>}
+                <strong>{isSearchAll ? 'Search Mode:' : 'Current:'}</strong> {selectedReportTitle}
+                {isSearchAll && !isGlobalSearch && <span className="ml-2 text-xs text-green-700">(Will search reports from {new Date(selectedDate).toLocaleDateString()} only)</span>}
+                {isGlobalSearch && <span className="ml-2 text-xs text-green-700">(Will search all reports across all dates)</span>}
               </span>
             </div>
           )}
@@ -385,11 +394,13 @@ export default function RAGDocumentChatbot() {
             <div className="h-full flex flex-col items-center justify-center text-slate-400">
               <FileText className="w-16 h-16 mb-4 opacity-20" />
               <p className="text-center max-w-md">
-                {selectedDocument
+                {selectedReport
                   ? (isSearchAll 
-                    ? 'Ask any question - I will search all documents to find the answer!'
-                    : 'Ask a question about the selected document to get started!')
-                  : 'Select a date and document to begin chatting, or choose "All" to search all documents'}
+                    ? (isGlobalSearch 
+                      ? 'Ask any question - I will search all reports to find the answer!'
+                      : `Ask any question - I will search reports from ${new Date(selectedDate).toLocaleDateString()}!`)
+                    : 'Ask a question about the selected report to get started!')
+                  : 'Select a date and report to begin chatting, or choose "All" to search reports'}
               </p>
             </div>
           ) : (
@@ -444,15 +455,15 @@ export default function RAGDocumentChatbot() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
                 isSearchAll 
-                  ? "Ask any question - searching all documents..." 
-                  : (selectedDocument ? "Ask a question..." : "Select a document first...")
+                  ? (isGlobalSearch ? "Ask any question - searching all reports..." : "Ask any question - searching reports from selected date...")
+                  : (selectedReport ? "Ask a question..." : "Select a report first...")
               }
-              disabled={(!selectedDocument && !isSearchAll) || loading}
+              disabled={(!selectedReport && !isSearchAll) || loading}
               className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
             />
             <button
               type="submit"
-              disabled={(!selectedDocument && !isSearchAll) || !query.trim() || loading}
+              disabled={(!selectedReport && !isSearchAll) || !query.trim() || loading}
               className={`px-4 py-2 text-white rounded-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors ${
                 isSearchAll ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
               }`}
