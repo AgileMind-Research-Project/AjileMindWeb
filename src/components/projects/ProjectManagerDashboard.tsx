@@ -13,6 +13,9 @@ interface Project {
   end_date: string;
   description?: string;
   template: string;
+  trust_index_threshold?: number;
+  prioritize_task_count?: number;
+  working_hours_for_day?: number;
 }
 
 export default function ProjectManagerDashboard() {
@@ -88,7 +91,7 @@ export default function ProjectManagerDashboard() {
         </div>
       )}
 
-      <ProjectsList 
+      <ProjectsList
         onCreateNew={handleOpenCreateModal}
         onEdit={handleOpenEditModal as any}
         refreshTrigger={refreshTrigger}
@@ -98,7 +101,7 @@ export default function ProjectManagerDashboard() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           {/* Backdrop with animation */}
-          <div 
+          <div
             className="fixed inset-0 bg-black transition-opacity duration-300 ease-out"
             style={{ opacity: showCreateModal ? 0.6 : 0 }}
             onClick={handleCloseModal}
@@ -107,9 +110,9 @@ export default function ProjectManagerDashboard() {
           {/* Modal Container */}
           <div className="flex items-center justify-center min-h-screen px-4 py-8">
             {/* Modal Content with professional styling */}
-            <div 
+            <div
               className="relative bg-white rounded-xl shadow-2xl transform transition-all duration-300 ease-out w-full max-w-5xl"
-              style={{ 
+              style={{
                 animation: 'slideInUp 0.3s ease-out',
                 maxHeight: '90vh',
                 display: 'flex',
@@ -138,7 +141,7 @@ export default function ProjectManagerDashboard() {
                         {modalMode === 'edit' ? 'Edit Project' : 'Create New Project'}
                       </h2>
                       <p className="mt-1 text-sm text-blue-100">
-                        {modalMode === 'edit' 
+                        {modalMode === 'edit'
                           ? 'Update your project details and save changes'
                           : 'Set up a new project in your workspace'
                         }
@@ -157,7 +160,7 @@ export default function ProjectManagerDashboard() {
               </div>
 
               {/* Modal Body with scrollable content */}
-              <div 
+              <div
                 className="px-8 py-6 overflow-y-auto bg-gray-50"
                 style={{ flex: '1 1 auto', maxHeight: 'calc(90vh - 180px)' }}
               >

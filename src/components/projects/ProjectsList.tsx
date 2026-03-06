@@ -19,6 +19,10 @@ interface Project {
   project_lead?: string;
   project_manager?: string[];
   description?: string;
+  trust_index_threshold?: number;
+  prioritize_task_count?: number;
+  working_hours_for_day?: number;
+  updated_at?: string;
 }
 
 interface ProjectsListProps {

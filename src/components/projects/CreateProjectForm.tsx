@@ -28,6 +28,10 @@ interface Project {
     backend_technologies?: string[];
     cloud_host?: string;
     budget?: number;
+    trust_index_threshold?: number;
+    prioritize_task_count?: number;
+    working_hours_for_day?: number;
+    updated_at?: string;
 }
 
 interface CreateProjectFormProps {
@@ -68,7 +72,10 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
         frontend_technologies: [] as string[],
         backend_technologies: [] as string[],
         cloud_host: '',
-        budget: 0
+        budget: 0,
+        trust_index_threshold: 80,
+        prioritize_task_count: 15,
+        working_hours_for_day: 8
     });
 
     const [users, setUsers] = useState<User[]>([]);
@@ -143,7 +150,10 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
                 frontend_technologies: editProject.frontend_technologies || [],
                 backend_technologies: editProject.backend_technologies || [],
                 cloud_host: editProject.cloud_host || '',
-                budget: editProject.budget || 0
+                budget: editProject.budget || 0,
+                trust_index_threshold: editProject.trust_index_threshold || 80,
+                prioritize_task_count: editProject.prioritize_task_count || 15,
+                working_hours_for_day: editProject.working_hours_for_day || 8
             });
         }
     }, [editProject, mode]);
@@ -158,7 +168,7 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
         // Convert key to uppercase automatically
         if (name === 'key') {
             setFormData(prev => ({ ...prev, [name]: value.toUpperCase() }));
-        } else if (name === 'sprint_size') {
+        } else if (name === 'sprint_size' || name === 'trust_index_threshold' || name === 'prioritize_task_count' || name === 'working_hours_for_day') {
             setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -281,6 +291,9 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
             if (formData.backend_technologies.length > 0) payload.backend_technologies = formData.backend_technologies;
             if (formData.cloud_host) payload.cloud_host = formData.cloud_host;
             if (formData.budget) payload.budget = formData.budget;
+            if (formData.trust_index_threshold) payload.trust_index_threshold = formData.trust_index_threshold;
+            if (formData.prioritize_task_count) payload.prioritize_task_count = formData.prioritize_task_count;
+            if (formData.working_hours_for_day) payload.working_hours_for_day = formData.working_hours_for_day;
 
             const response = await fetch(url, {
                 method: method,
@@ -314,6 +327,14 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
+            {mode === 'edit' && editProject?.updated_at && (
+                <div className="flex justify-end pr-2">
+                    <span className="text-[10px] text-gray-400 font-medium">
+                        Last Updated: {new Date(editProject.updated_at).toLocaleString()}
+                    </span>
+                </div>
+            )}
+
             {submitError && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-r shadow-sm animate-shake">
                     <div className="flex items-center">
@@ -602,6 +623,68 @@ export default function CreateProjectForm({ onSuccess, onCancel, editProject, mo
                         )}
                         <p className="mt-2 text-xs text-gray-500">
                             💡 Only users with PROJECT_MANAGER role are shown
+                        </p>
+                    </div>
+
+                    {/* Trust Index Threshold */}
+                    <div>
+                        <label htmlFor="trust_index_threshold" className="block text-sm font-semibold text-gray-700 mb-2">
+                            Trust Index Threshold (%)
+                        </label>
+                        <input
+                            type="number"
+                            id="trust_index_threshold"
+                            name="trust_index_threshold"
+                            value={formData.trust_index_threshold}
+                            onChange={handleInputChange}
+                            min="0"
+                            max="100"
+                            className="mt-1 block w-full px-4 py-3 rounded-lg border-2 border-gray-200 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 sm:text-sm transition-all duration-200"
+                            placeholder="e.g., 80"
+                        />
+                        <p className="mt-2 text-xs text-gray-500">
+                            Minimum confidence score (0-100) before flagging
+                        </p>
+                    </div>
+
+                    {/* Prioritize Task Count */}
+                    <div>
+                        <label htmlFor="prioritize_task_count" className="block text-sm font-semibold text-gray-700 mb-2">
+                            Prioritize Task Count
+                        </label>
+                        <input
+                            type="number"
+                            id="prioritize_task_count"
+                            name="prioritize_task_count"
+                            value={formData.prioritize_task_count}
+                            onChange={handleInputChange}
+                            min="1"
+                            className="mt-1 block w-full px-4 py-3 rounded-lg border-2 border-gray-200 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 sm:text-sm transition-all duration-200"
+                            placeholder="e.g., 15"
+                        />
+                        <p className="mt-2 text-xs text-gray-500">
+                            Number of top tasks to prioritize in AI reports
+                        </p>
+                    </div>
+
+                    {/* Working Hours For Day */}
+                    <div>
+                        <label htmlFor="working_hours_for_day" className="block text-sm font-semibold text-gray-700 mb-2">
+                            Working Hours For Day
+                        </label>
+                        <input
+                            type="number"
+                            id="working_hours_for_day"
+                            name="working_hours_for_day"
+                            value={formData.working_hours_for_day}
+                            onChange={handleInputChange}
+                            min="1"
+                            max="24"
+                            className="mt-1 block w-full px-4 py-3 rounded-lg border-2 border-gray-200 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 sm:text-sm transition-all duration-200"
+                            placeholder="e.g., 8"
+                        />
+                        <p className="mt-2 text-xs text-gray-500">
+                            Standard working hours per day (1-24)
                         </p>
                     </div>
                 </div>
