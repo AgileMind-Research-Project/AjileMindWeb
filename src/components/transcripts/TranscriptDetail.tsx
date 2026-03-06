@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   FileText, Calendar, Tag, Trash2,
   ChevronDown, ChevronUp, RefreshCw, Sparkles,
-  User, Clock, Pencil, Check, X, AlertCircle,
+  User, Clock, Pencil, Check, X, AlertCircle, Edit, FileBarChart, ChevronRight
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store/auth.store";
 
@@ -117,6 +117,8 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
   const [analyzed, setAnalyzed]         = useState(false);
   const [tasks, setTasks]               = useState<AnalyzedTask[]>([]);
   const [leaveInfo, setLeaveInfo]       = useState<LeaveEntry[]>([]);
+   const [reports, setReports] = useState<Report[]>([]);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   // per-task UI state
   const [taskStates, setTaskStates] = useState<Record<number, TaskState>>({});
@@ -276,12 +278,47 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
       });
       if (!res.ok) throw new Error("Failed to delete transcript");
       router.push("/transcripts");
-    } catch (err: unknown) {
+       } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete transcript");
     }
   };
 
-  // ── loading state ────────────────────────────────────────────────────────
+  const getCategoryBadge = (category: string) => {
+    const styles = {
+      daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+      sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      brainstorming: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+    };
+
+    const labels = {
+      daily_standup: "Daily Standup",
+      sprint_planning: "Sprint Planning",
+      sprint_meeting: "Sprint Meeting",
+      retrospective: "Retrospective",
+      brainstorming: "Brainstorming"
+    };
+
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[category as keyof typeof styles]}`}>
+        {labels[category as keyof typeof labels]}
+      </span>
+    );
+  };
+
+  const getStatusBadge = (status: string) => {
+    return status === "published" ? (
+      <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full text-xs">
+        Published
+      </span>
+    ) : (
+      <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-full text-xs">
+        Draft
+      </span>
+    );
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -357,7 +394,15 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
             )}
           </div>
 
-          <button
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowGenerateModal(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
+                >
+                  <FileBarChart className="w-4 h-4" />
+                  Generate Report
+                </button>
+                 <button
             onClick={handleDelete}
             className="shrink-0 flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
           >
@@ -366,6 +411,7 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
           </button>
         </div>
       </div>
+          </div>
 
       {/* ── Transcript content (collapsed by default) ─────────────────────── */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
@@ -688,6 +734,19 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
           </div>
         )}
       </div>
-    </div>
+  </div>
+      {/* Generate Report Modal */}
+      {showGenerateModal && (
+        <ReportGenerator
+          transcriptId={transcriptId}
+          onClose={() => setShowGenerateModal(false)}
+          onGenerated={(reportId) => {
+            setShowGenerateModal(false);
+            fetchReports();
+            router.push(`/reports/${reportId}`);
+          }}
+        />
+      )}
+    </>
   );
 }

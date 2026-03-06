@@ -17,6 +17,7 @@ interface Transcript {
   created_at: string;
   project_id?: number;
   project_name?: string;
+  report_generated: 'pending' | 'done';
 }
 
 interface Project {
@@ -51,7 +52,8 @@ export default function TranscriptList() {
     dateTo: "",
     search: "",
     page: 1,
-    projectId: ""
+    projectId: "",
+    reportGenerated: ""
   });
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -103,6 +105,7 @@ export default function TranscriptList() {
       if (filters.dateFrom) params.append("date_from", filters.dateFrom);
       if (filters.dateTo) params.append("date_to", filters.dateTo);
       if (filters.search) params.append("search", filters.search);
+      if (filters.reportGenerated) params.append("report_generated", filters.reportGenerated);
       params.append("page", filters.page.toString());
       params.append("page_size", "20");
 
@@ -154,14 +157,16 @@ export default function TranscriptList() {
       daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
       sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
       sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      brainstorming: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
     };
 
     const labels = {
       daily_standup: "Daily Standup",
       sprint_planning: "Sprint Planning",
       sprint_meeting: "Sprint Meeting",
-      retrospective: "Retrospective"
+      retrospective: "Retrospective",
+      brainstorming: "Brainstorming"
     };
 
     return (
@@ -192,7 +197,7 @@ export default function TranscriptList() {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* Search */}
             <div className="md:col-span-2">
               <div className="relative">
@@ -219,6 +224,7 @@ export default function TranscriptList() {
                 <option value="sprint_planning">Sprint Planning</option>
                 <option value="sprint_meeting">Sprint Meeting</option>
                 <option value="retrospective">Retrospective</option>
+                <option value="brainstorming">Brainstorming</option>
               </select>
             </div>
 
@@ -235,6 +241,19 @@ export default function TranscriptList() {
                     {project.project_name} ({project.key})
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Report Status Filter */}
+            <div>
+              <select
+                value={filters.reportGenerated}
+                onChange={(e) => setFilters(prev => ({ ...prev, reportGenerated: e.target.value, page: 1 }))}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">All Report Status</option>
+                <option value="pending">Pending</option>
+                <option value="done">Done</option>
               </select>
             </div>
 
@@ -301,6 +320,9 @@ export default function TranscriptList() {
                           Tags
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Report Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -348,6 +370,15 @@ export default function TranscriptList() {
                             ) : (
                               <span className="text-gray-400 dark:text-gray-500 text-sm">-</span>
                             )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              transcript.report_generated === 'done'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                            }`}>
+                              {transcript.report_generated === 'done' ? 'Done' : 'Pending'}
+                            </span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex gap-2">

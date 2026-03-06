@@ -18,7 +18,7 @@ interface Report {
   template_id: number | null;
   version: number;
   status: string;
-  generated_at: string;
+  created_at: string;
   updated_at: string;
 }
 
@@ -184,14 +184,20 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
 
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Progress Summary</h3>
-        <ul className="space-y-2 ml-7">
-          {content.progress_summary?.map((item: string, index: number) => (
-            <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-              <span className="text-green-600 mt-1">•</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+        {Array.isArray(content.progress_summary) ? (
+          <ul className="space-y-2 ml-7">
+            {content.progress_summary.map((item: string, index: number) => (
+              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                <span className="text-green-600 mt-1">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            {content.progress_summary || "No progress summary available."}
+          </p>
+        )}
       </div>
 
       <div>
@@ -310,6 +316,138 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
     </div>
   );
 
+  const renderBrainstorming = (content: any) => (
+    <div className="space-y-6">
+      {/* Meeting Info */}
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+        <h3 className="text-lg font-semibold text-yellow-700 dark:text-yellow-400 mb-2">
+          💡 {content.meeting_topic || "Brainstorming Session"}
+        </h3>
+        <p className="text-gray-700 dark:text-gray-300">
+          <strong>Objective:</strong> {content.meeting_objective || "Not specified"}
+        </p>
+        {content.participants && content.participants.length > 0 && (
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            <strong>Participants:</strong> {content.participants.join(", ")}
+          </p>
+        )}
+      </div>
+
+      {/* Summary */}
+      {content.summary && (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Summary</h3>
+          <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            {content.summary}
+          </p>
+        </div>
+      )}
+
+      {/* Top Ideas */}
+      {content.top_ideas && content.top_ideas.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-green-700 dark:text-green-400 mb-3">🌟 Top Ideas</h3>
+          <ul className="space-y-2 ml-7">
+            {content.top_ideas.map((idea: string, index: number) => (
+              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                <span className="text-green-600 mt-1">★</span>
+                <span>{idea}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* All Ideas Generated */}
+      {content.ideas_generated && content.ideas_generated.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-400 mb-3">💭 Ideas Generated</h3>
+          <div className="space-y-3">
+            {content.ideas_generated.map((item: any, index: number) => (
+              <div key={index} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="font-medium text-gray-900 dark:text-white mb-2">{item.idea}</p>
+                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                  {item.proposed_by && <span>By: <strong>{item.proposed_by}</strong></span>}
+                  {item.category && <span>Category: <strong>{item.category}</strong></span>}
+                  {item.votes > 0 && <span>Votes: <strong>{item.votes}</strong></span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Key Themes */}
+      {content.key_themes && content.key_themes.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-purple-700 dark:text-purple-400 mb-3">🔑 Key Themes</h3>
+          <div className="flex flex-wrap gap-2">
+            {content.key_themes.map((theme: string, index: number) => (
+              <span key={index} className="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full text-sm">
+                {theme}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Categories */}
+      {content.categories && content.categories.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">📂 Categories</h3>
+          <div className="flex flex-wrap gap-2">
+            {content.categories.map((category: string, index: number) => (
+              <span key={index} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm">
+                {category}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Decisions Made */}
+      {content.decisions_made && content.decisions_made.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-indigo-700 dark:text-indigo-400 mb-3">✅ Decisions Made</h3>
+          <ul className="space-y-2 ml-7">
+            {content.decisions_made.map((decision: any, index: number) => (
+              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                <span className="text-indigo-600 mt-1">•</span>
+                <span>
+                  {typeof decision === 'string' ? decision : decision.decision}
+                  {typeof decision === 'object' && decision.assignee && (
+                    <span className="ml-2 text-sm text-indigo-600 dark:text-indigo-400">
+                      (Assignee: {decision.assignee})
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Next Steps */}
+      {content.next_steps && content.next_steps.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-orange-700 dark:text-orange-400 mb-3">🚀 Next Steps</h3>
+          <div className="space-y-3">
+            {content.next_steps.map((item: any, index: number) => (
+              <div key={index} className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <p className="font-medium text-gray-900 dark:text-white mb-2">{item.task}</p>
+                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                  {item.assignee && <span>Assignee: <strong>{item.assignee}</strong></span>}
+                  {item.due_date && <span>Due: <strong>{item.due_date}</strong></span>}
+                  {item.priority && <span>Priority: <strong>{item.priority}</strong></span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6">
@@ -355,7 +493,7 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
-                  Generated {new Date(report.generated_at).toLocaleDateString()}
+                  Generated {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'N/A'}
                 </span>
                 <span>•</span>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -396,12 +534,35 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
           </div>
         </div>
 
+        {/* Header Image */}
+        {report.report_content?.header_image && (
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <img 
+              src={report.report_content.header_image} 
+              alt="Report Header" 
+              className="w-full max-h-48 object-contain rounded-lg"
+            />
+          </div>
+        )}
+
         {/* Report Content */}
         <div className="p-8">
           {report.report_type === "daily_standup" && renderDailyStandup(report.report_content)}
           {report.report_type === "sprint_meeting" && renderSprintMeeting(report.report_content)}
           {report.report_type === "retrospective" && renderRetrospective(report.report_content)}
+          {report.report_type === "brainstorming" && renderBrainstorming(report.report_content)}
         </div>
+
+        {/* Footer Image */}
+        {report.report_content?.footer_image && (
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+            <img 
+              src={report.report_content.footer_image} 
+              alt="Report Footer" 
+              className="w-full max-h-48 object-contain rounded-lg"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

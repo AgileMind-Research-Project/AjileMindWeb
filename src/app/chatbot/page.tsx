@@ -1,7 +1,7 @@
 /**
- * Document RAG Chatbot Page
+ * Report RAG Chatbot Page
  * 
- * Page for the RAG-based document chatbot interface
+ * Page for the RAG-based report chatbot interface
  */
 
 'use client';

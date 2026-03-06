@@ -2,9 +2,12 @@
  * Document & RAG Chatbot API Hooks
  * 
  * Custom React hooks for:
- * - Fetching unique document upload dates
- * - Fetching documents for a specific date
+ * - Fetching unique report dates (from reports table)
+ * - Fetching reports for a specific date
  * - Sending chat queries and getting RAG responses
+ * 
+ * Note: These hooks now work with the reports table data.
+ * Categories correspond to report_type: daily_standup, sprint_meeting, retrospective, brainstorming
  */
 
 'use client';
@@ -12,17 +15,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth'; // Assuming auth hook exists
 
+// Report types available
+export const REPORT_TYPES = {
+  DAILY_STANDUP: 'daily_standup',
+  SPRINT_MEETING: 'sprint_meeting',
+  RETROSPECTIVE: 'retrospective',
+  BRAINSTORMING: 'brainstorming',
+} as const;
+
+export type ReportType = typeof REPORT_TYPES[keyof typeof REPORT_TYPES];
+
+// Helper to get human-readable report type name
+export function getReportTypeName(type: string): string {
+  const names: Record<string, string> = {
+    daily_standup: 'Daily Standup',
+    sprint_meeting: 'Sprint Meeting',
+    retrospective: 'Retrospective',
+    brainstorming: 'Brainstorming',
+  };
+  return names[type] || type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 interface DocumentDate {
-  uploaded_date: string;
+  uploaded_date: string;  // Date from reports.created_at
   count: number;
 }
 
 interface Document {
-  id: number;
-  doc_title: string;
-  uploaded_date: string;
-  category?: string;
-  created_at: string;
+  id: number;              // Report ID
+  doc_title: string;       // Generated from report_type + date
+  uploaded_date: string;   // From reports.created_at
+  category?: string;       // report_type
+  created_at?: string;
 }
 
 interface ChatResponse {
@@ -36,7 +60,8 @@ interface ChatResponse {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 /**
- * Hook for fetching unique document dates
+ * Hook for fetching unique report dates
+ * Returns dates when reports were created, with counts
  */
 export function useDocumentDates() {
   const [dates, setDates] = useState<DocumentDate[]>([]);
@@ -51,6 +76,7 @@ export function useDocumentDates() {
       setLoading(true);
       setError(null);
       try {
+        // Fetches unique dates from reports table
         const response = await fetch(`${API_BASE}/documents/dates`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -79,7 +105,8 @@ export function useDocumentDates() {
 }
 
 /**
- * Hook for fetching documents by a specific date
+ * Hook for fetching reports by a specific date
+ * Returns reports created on the given date
  */
 export function useDocumentsByDate(uploadedDate: string | null) {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -130,6 +157,7 @@ export function useDocumentsByDate(uploadedDate: string | null) {
 
 /**
  * Hook for sending chat queries and getting RAG responses
+ * Uses report content for context
  */
 export function useChatWithDocument() {
   const [loading, setLoading] = useState(false);
@@ -137,7 +165,7 @@ export function useChatWithDocument() {
   const { token } = useAuth();
 
   const chat = useCallback(
-    async (documentId: number, query: string): Promise<ChatResponse> => {
+    async (reportId: number, query: string): Promise<ChatResponse> => {
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -153,7 +181,7 @@ export function useChatWithDocument() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            document_id: documentId,
+            document_id: reportId,  // Report ID
             query: query,
           }),
         });
