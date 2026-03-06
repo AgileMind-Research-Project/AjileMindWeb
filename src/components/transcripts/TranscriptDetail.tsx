@@ -8,6 +8,7 @@ import {
   User, Clock, Pencil, Check, X, AlertCircle, Edit, FileBarChart, ChevronRight
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store/auth.store";
+import ReportGenerator from "@/components/reports/ReportGenerator";
 
 const API_BASE = "http://localhost:8000";
 
@@ -62,6 +63,17 @@ interface TaskState {
   editAssignee: string;
   users: ProjectUser[];
   usersLoaded: boolean;
+}
+
+interface Report {
+  id: number;
+  transcript_id: number;
+  report_type: string;
+  template_id: number | null;
+  version: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface TranscriptDetailProps {
@@ -269,6 +281,17 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
       editAssignee: tasks[idx]?.assignee ?? "",
     });
 
+  const fetchReports = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/reports/?transcript_id=${transcriptId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setReports(data.reports || []);
+    } catch { /* silent */ }
+  };
+
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this transcript? This action cannot be undone.")) return;
     try {
@@ -347,6 +370,7 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
 
   // ── render ───────────────────────────────────────────────────────────────
   return (
+    <>
     <div className="max-w-7xl mx-auto p-6 space-y-6">
 
       {/* ── Header card ──────────────────────────────────────────────────── */}
