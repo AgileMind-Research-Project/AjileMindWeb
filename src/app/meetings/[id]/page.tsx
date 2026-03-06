@@ -15,6 +15,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useMeetingStore } from '@/lib/store/meetingStore';
 import { meetingAPI } from '@/lib/api/meetingAPI';
+import { scheduledMeetingAPI } from '@/lib/api/scheduledMeetingAPI';
 import socketClient from '@/lib/websocket/socketClient';
 import * as webrtc from '@/lib/webrtc/peerConnection';
 import { useWebRTC } from '@/lib/webrtc/useWebRTC';
@@ -46,17 +47,20 @@ export default function MeetingRoomPage() {
     const params = useParams();
     const searchParams = useSearchParams();
     const router = useRouter();
-    const meetingId = params.id as string;
-    const channelId = searchParams.get('channel');
-    const channelTitle = searchParams.get('title');
+    const meetingId = params?.id as string;
+    const channelId = searchParams?.get('channel') || null;
+    const channelTitle = searchParams?.get('title') || null;
 
     const [isInitializing, setIsInitializing] = useState(true);
     const [showChat, setShowChat] = useState(false);
     const [showParticipants, setShowParticipants] = useState(false);
     const [meetingData, setMeetingData] = useState<any>(null);
+    const [scheduledMeeting, setScheduledMeeting] = useState<any>(null);
     const [apiParticipants, setApiParticipants] = useState<Participant[]>([]);
     const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
     const [isHost, setIsHost] = useState(false);
+    const [isExtending, setIsExtending] = useState(false);
+    const [isJoinedLocal, setIsJoinedLocal] = useState(false); // Lobby state
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
     const [currentUserRole, setCurrentUserRole] = useState<string>('');
@@ -97,7 +101,7 @@ export default function MeetingRoomPage() {
     // Initialize WebRTC for peer-to-peer video/audio
     const { sendChatMessage, broadcastMicStatus, broadcastCameraStatus } = useWebRTC({
         meetingId,
-        userId: currentUserId,
+        userId: isJoinedLocal ? currentUserId : '', // Only connect when joined
         username: currentUserEmail || currentUserId, // User email for chat display
         userRole: currentUserRole,
         userEmail: currentUserEmail,
@@ -551,18 +555,55 @@ export default function MeetingRoomPage() {
 
     const loadMeetingData = async () => {
         try {
+            // 1. Get real-time meeting data from Redis
             const response = await meetingAPI.getMeeting(meetingId);
-            console.log('📊 Meeting data loaded:', response);
+            console.log('📊 Active Meeting data loaded:', response);
 
             if (response.success && response.data) {
                 setMeetingData(response.data);
+                setMeetingStatus(response.data.status);
 
-                // Check if current user is host
+                // 2. Get DB scheduled meeting data (for end_time check)
+                const schedResponse = await scheduledMeetingAPI.getById(meetingId);
+                if (schedResponse.success && schedResponse.data) {
+                    setScheduledMeeting(schedResponse.data);
+
+                    // Check if meeting has expired
+                    const now = new Date();
+                    const meetingDateStr = schedResponse.data.meeting_date; // YYYY-MM-DD
+                    const endTimeStr = schedResponse.data.end_time; // HH:MM:SS or HH:MM
+
+                    // Create Date object for end time
+                    const [hour, minute] = endTimeStr.split(':').map(Number);
+                    const endDateTime = new Date(meetingDateStr);
+                    endDateTime.setHours(hour, minute, 0, 0);
+
+                    // Add a 5 minute grace period before blocking
+                    const gracePeriod = 5 * 60 * 1000;
+                    if (now.getTime() > (endDateTime.getTime() + gracePeriod) && response.data.status !== 'ended') {
+                        console.warn('❌ Meeting time expired. Redirecting...');
+                        alert('This meeting scheduled time has ended.');
+                        router.push('/chat');
+                        return;
+                    }
+                }
+
+                // Check if host
                 const token = localStorage.getItem('access_token');
                 if (token) {
-                    const payload = JSON.parse(atob(token.split('.')[1]));
-                    const userId = payload.user_id || payload.sub;
-                    setIsHost(response.data.created_by_user_id === userId);
+                    try {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        const userId = payload.user_id || payload.sub;
+                        const userEmail = payload.email || payload.username;
+
+                        // Check against Redis or DB
+                        const isMainHost = response.data.created_by_user_id === userId;
+                        const isScheduledHost = schedResponse?.data?.created_by === userEmail;
+
+                        setIsHost(isMainHost || isScheduledHost);
+                    } catch (e) {
+                        console.error('Lobby Host Check Error:', e);
+                    }
                 }
 
                 if (response.data.status === 'ended') {
@@ -570,8 +611,6 @@ export default function MeetingRoomPage() {
                     router.push('/chat');
                     return;
                 }
-
-                setMeetingStatus(response.data.status);
 
                 // Load participants
                 const partResponse = await meetingAPI.getParticipants(meetingId);
@@ -638,10 +677,11 @@ export default function MeetingRoomPage() {
             });
 
             setLocalStream(stream);
-            setInMeeting(true);
+            console.log('📹 Media initialized for Lobby');
 
-            // Auto-join as participant
+            // Auto-join participant set immediately so host can see 2/2 count
             await autoJoinMeeting();
+            console.log('👥 Participant registered in Lobby');
 
         } catch (error: any) {
             console.error('Failed to access media devices:', error);
@@ -659,9 +699,7 @@ export default function MeetingRoomPage() {
                 });
 
                 setLocalStream(audioStream);
-                setInMeeting(true);
                 alert('Camera unavailable (may be used by another browser). Joining with audio only.');
-                await autoJoinMeeting();
 
             } catch (audioError) {
                 console.error('Audio-only also failed:', audioError);
@@ -750,6 +788,60 @@ export default function MeetingRoomPage() {
         }
     };
 
+    const handleJoinMeeting = async () => {
+        setIsInitializing(true);
+        try {
+            // 1. Join meeting room in state
+            setInMeeting(true);
+
+            // 2. Flag as joined (this triggers useWebRTC connect)
+            setIsJoinedLocal(true);
+
+            // AUTO-START: If meeting is not yet live, start it automatically upon joining
+            if (meetingStatus !== 'live' && meetingStatus !== 'ended') {
+                console.log('🔄 Meeting status is', meetingStatus, '- Auto-starting session...');
+                try {
+                    const res = await meetingAPI.startMeeting(meetingId);
+                    if (res.success) {
+                        setMeetingStatus('live');
+                        console.log('✅ Meeting auto-started successfully');
+                    }
+                } catch (err) {
+                    console.error('❌ Auto-start quiet failure:', err);
+                    // Silently continue - polling will eventually pick up status or user can click manual button if it appears
+                }
+            }
+
+            console.log('🚀 Successfully entered meeting from lobby');
+        } catch (error) {
+            console.error('Join failed:', error);
+            alert('Failed to join meeting. Please try again.');
+        } finally {
+            setIsInitializing(false);
+        }
+    };
+
+    const handleStartMeeting = async () => {
+
+        if (apiParticipants.length < 1) {
+            alert('At least one participant is required to start the meeting.');
+            return;
+        }
+
+        try {
+            const res = await meetingAPI.startMeeting(meetingId);
+            if (res.success) {
+                setMeetingStatus('live');
+                alert('Meeting is now LIVE!');
+            } else {
+                alert('Failed to start meeting.');
+            }
+        } catch (error) {
+            console.error('Start failed:', error);
+            alert('An error occurred while starting the meeting.');
+        }
+    };
+
     const handleEndMeeting = async () => {
         try {
             // End meeting FIRST (so "Meeting Ended" message appears first)
@@ -787,11 +879,54 @@ export default function MeetingRoomPage() {
                 ended_by: currentUserId
             });
 
+            // NEW: Update database attendees list when meeting ends
+            try {
+                const attendeeEmails = apiParticipants.map(p => p.username).filter(email => email.includes('@'));
+                if (attendeeEmails.length > 0) {
+                    await scheduledMeetingAPI.updateAttendees(meetingId, attendeeEmails);
+                    console.log('✅ Final attendees list updated in database');
+                }
+            } catch (attendeeError) {
+                console.warn('⚠️ Failed to update final attendees:', attendeeError);
+            }
+
             leaveMeeting();
             router.push('/chat');
         } catch (error) {
             console.error('Failed to end meeting:', error);
             alert('Failed to end meeting');
+        }
+    };
+
+    const handleExtendMeeting = async () => {
+        if (!scheduledMeeting || !isHost) return;
+
+        try {
+            setIsExtending(true);
+            // Calculate new end time (+15 minutes from current scheduled end time)
+            const endTimeStr = scheduledMeeting.end_time;
+            const meetingDateStr = scheduledMeeting.meeting_date;
+
+            const [hour, minute] = endTimeStr.split(':').map(Number);
+            const endDate = new Date(`${meetingDateStr}T00:00:00`);
+            endDate.setHours(hour, minute + 15, 0, 0);
+
+            const newHours = endDate.getHours().toString().padStart(2, '0');
+            const newMinutes = endDate.getMinutes().toString().padStart(2, '0');
+            const newEndTime = `${newHours}:${newMinutes}`;
+
+            const res = await scheduledMeetingAPI.extendEndTime(meetingId, newEndTime);
+            if (res.success) {
+                setScheduledMeeting({ ...scheduledMeeting, end_time: newEndTime });
+                alert(`Meeting extended by 15 minutes. New end time: ${newEndTime}`);
+            } else {
+                alert('Failed to extend meeting time. Please try again.');
+            }
+        } catch (error) {
+            console.error('Extension failed:', error);
+            alert('An error occurred while extending the meeting.');
+        } finally {
+            setIsExtending(false);
         }
     };
 
@@ -823,13 +958,117 @@ export default function MeetingRoomPage() {
         }
     };
 
-    if (isInitializing) {
+    if (isInitializing && !localStream) {
         return (
             <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
-                    <h2 className="text-xl font-semibold text-white mb-2">Joining Meeting...</h2>
-                    <p className="text-gray-400">Setting up your camera and microphone</p>
+                    <h2 className="text-xl font-semibold text-white mb-2">Initializing Room...</h2>
+                    <p className="text-gray-400">Setting up your professional space</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isJoinedLocal) {
+        return (
+            <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4">
+                <div className="max-w-4xl w-full bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
+                    <div className="flex flex-col md:flex-row h-full">
+                        {/* Video Preview Section */}
+                        <div className="md:w-3/5 bg-black p-6 relative flex items-center justify-center min-h-[400px]">
+                            {isVideoEnabled ? (
+                                <video
+                                    ref={setVideoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover rounded-xl scale-x-[-1]"
+                                />
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 rounded-xl border-2 border-dashed border-gray-800">
+                                    <div className="w-24 h-24 bg-blue-600/10 rounded-full flex items-center justify-center mb-6">
+                                        <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-gray-500 font-semibold tracking-wide uppercase text-sm">Camera is Off</span>
+                                </div>
+                            )}
+
+                            {/* Preview Controls Overlay */}
+                            <div className="absolute bottom-10 flex gap-6">
+                                <button
+                                    onClick={toggleAudio}
+                                    className={`p-4 rounded-full transition-all border-2 ${isAudioEnabled
+                                        ? 'bg-gray-800/80 border-gray-600 text-white hover:bg-gray-700'
+                                        : 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30'
+                                        }`}
+                                >
+                                    {isAudioEnabled ? (
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                        </svg>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={toggleVideo}
+                                    className={`p-4 rounded-full transition-all border-2 ${isVideoEnabled
+                                        ? 'bg-gray-800/80 border-gray-600 text-white hover:bg-gray-700'
+                                        : 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30'
+                                        }`}
+                                >
+                                    {isVideoEnabled ? (
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Join Info Section */}
+                        <div className="md:w-2/5 p-10 flex flex-col justify-center border-l border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+                            <h2 className="text-3xl font-bold text-white mb-2">Ready to join?</h2>
+                            <p className="text-gray-400 mb-10 text-lg">{channelTitle || scheduledMeeting?.title || 'Meeting Room'}</p>
+
+                            <div className="space-y-6 mb-12">
+                                <div className="flex items-center gap-4 bg-gray-700/30 p-4 rounded-xl border border-gray-600/30">
+                                    <div className={`w-3 h-3 rounded-full ${isAudioEnabled ? 'bg-green-500' : 'bg-red-500'} shadow-[0_0_10px_rgba(34,197,94,0.3)]`} />
+                                    <span className="text-sm font-medium text-gray-200">{isAudioEnabled ? 'Microphone is ON' : 'Microphone is OFF'}</span>
+                                </div>
+                                <div className="flex items-center gap-4 bg-gray-700/30 p-4 rounded-xl border border-gray-600/30">
+                                    <div className={`w-3 h-3 rounded-full ${isVideoEnabled ? 'bg-green-500' : 'bg-red-500'} shadow-[0_0_10px_rgba(34,197,94,0.3)]`} />
+                                    <span className="text-sm font-medium text-gray-200">{isVideoEnabled ? 'Camera is ON' : 'Camera is OFF'}</span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleJoinMeeting}
+                                disabled={isInitializing}
+                                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-xl shadow-blue-600/20 active:scale-95 text-lg"
+                            >
+                                {isInitializing ? 'Preparing...' : 'Join Now'}
+                            </button>
+
+                            <div className="mt-8 pt-8 border-t border-gray-700">
+                                <p className="text-xs text-center text-gray-500 font-medium tracking-widest uppercase">
+                                    {apiParticipants.length > 0
+                                        ? `${apiParticipants.length} people already waiting`
+                                        : 'No one has joined yet'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -842,10 +1081,45 @@ export default function MeetingRoomPage() {
                 <div className="flex items-center gap-4">
                     <div>
                         <h1 className="text-lg font-semibold text-white">
-                            {channelTitle || 'Meeting'}
+                            {channelTitle || scheduledMeeting?.title || 'Meeting'}
                         </h1>
-                        <p className="text-sm text-gray-400">Meeting ID: {meetingId.slice(0, 20)}...</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm text-gray-400">Meeting ID: {meetingId.slice(0, 8)}...</p>
+                            {scheduledMeeting && (
+                                <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded border border-gray-600">
+                                    Ends at {scheduledMeeting.end_time}
+                                </span>
+                            )}
+                            {isHost && (
+                                <button
+                                    onClick={handleExtendMeeting}
+                                    disabled={isExtending}
+                                    className="text-xs px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-600/40 transition-colors disabled:opacity-50"
+                                >
+                                    {isExtending ? 'Extending...' : '+15 Mins'}
+                                </button>
+                            )}
+                        </div>
                     </div>
+                </div>
+
+                <div className="flex-1 flex justify-center gap-4">
+                    {meetingStatus === 'live' ? (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 text-green-500 border border-green-500/20 rounded-full text-xs font-bold animate-pulse">
+                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                            HAPPENING NOW
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <div className="px-3 py-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full text-xs font-bold">
+                                MEETING PENDING
+                            </div>
+                            <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold flex items-center gap-2">
+                                <div className="w-1 h-1 bg-gray-500 rounded-full animate-ping" />
+                                <span>System Syncing...</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1147,11 +1421,14 @@ export default function MeetingRoomPage() {
                                 })}
                         </div>
 
-                        {/* Waiting Message - Only when alone */}
+                        {/* Waiting Message - Only when truly alone (0) or waiting for others (1) */}
                         {apiParticipants.length <= 1 && (
                             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                                 <div className="bg-black/50 backdrop-blur-sm rounded-lg px-6 py-4">
                                     <p className="text-gray-300 text-lg">Waiting for others to join...</p>
+                                    <div className="mt-4 px-4 py-2 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-xl inline-block text-xs font-bold uppercase tracking-widest animate-pulse">
+                                        Meeting Pending: You can start the meeting now!
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -1182,8 +1459,8 @@ export default function MeetingRoomPage() {
                                 <button
                                     onClick={() => setActiveTab('chat')}
                                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'chat'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                         }`}
                                 >
                                     <div className="flex items-center justify-center gap-2">
@@ -1201,8 +1478,8 @@ export default function MeetingRoomPage() {
                                 <button
                                     onClick={() => setActiveTab('transcript')}
                                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'transcript'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                         }`}
                                 >
                                     <div className="flex items-center justify-center gap-2">

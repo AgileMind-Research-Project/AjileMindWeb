@@ -10,13 +10,12 @@
  * - Redis backend API (/api/v1/chat)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useChatStore, Channel, Message } from '@/lib/store/chatStore';
 import { ChannelSidebar } from '@/components/communication/ChannelSidebar';
 import { MessageList } from '@/components/communication/MessageList';
 import { MessageInput } from '@/components/communication/MessageInput';
-import { WebSocketProvider } from '@/lib/websocket/WebSocketContext';
-import { useChat } from '@/lib/hooks/useChat';
+import { ScheduleMeetingModal } from '@/components/meetings/ScheduleMeetingModal';
 import { API_CONFIG } from '@/lib/config/api.config';
 
 // Redis Chat API Configuration
@@ -264,6 +263,7 @@ const transformRedisChannel = (redisChannel: any): Channel => ({
     unread_count: 0,
     team_name: redisChannel.team_name || undefined,
     team_id: redisChannel.project_id ? String(redisChannel.project_id) : undefined,
+    project_id: redisChannel.project_id || undefined,
     is_member: redisChannel.is_member
 });
 
@@ -322,6 +322,11 @@ function ChatContent() {
     const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
     const [loadingTranscripts, setLoadingTranscripts] = useState(false);
 
+    // Schedule Meeting State
+    const [showScheduleMeetingModal, setShowScheduleMeetingModal] = useState(false);
+    const [projectSprints, setProjectSprints] = useState<any[]>([]);
+    const [scheduleToast, setScheduleToast] = useState<string | null>(null);
+
     const channels = useChatStore((state) => state.channels);
     const activeChannelId = useChatStore((state) => state.activeChannelId);
     const setChannels = useChatStore((state) => state.setChannels);
@@ -338,7 +343,100 @@ function ChatContent() {
         state.channels.find((ch) => ch.id === state.activeChannelId) || null
     );
 
-    const { isConnected } = useChat(activeChannelId, !!activeChannelId);
+
+    // Polling state
+    const pollingRef = useRef<NodeJS.Timeout | null>(null);
+    const [isPolling, setIsPolling] = useState(false);
+
+    // Poll messages for the active channel (REST-based real-time)
+    const pollMessages = useCallback(async (channelId: string) => {
+        try {
+            const response = await redisChatAPI.getMessages(channelId, 50);
+            if (response.success && response.data?.messages) {
+                const incoming: Message[] = response.data.messages
+                    .map(transformRedisMessage)
+                    .reverse(); // newest-first → oldest-first
+
+                // Build a Set of IDs returned by server (deleted msgs are EXCLUDED by backend)
+                const serverIds = new Set(incoming.map((m) => m.id));
+
+                // Build a map of current store messages for fast lookup
+                const currentMessages = useChatStore.getState().messages[channelId] || [];
+                const existingMap = new Map(currentMessages.map((m) => [m.id, m]));
+
+                let added = 0;
+                let deleted = 0;
+                let updated = 0;
+
+                // ── Step 1: detect messages silently dropped by server → they were deleted ──
+                // Backend omits soft-deleted messages from GET /messages response entirely.
+                // If a message was in our store but is now absent from server → mark is_deleted.
+                currentMessages.forEach((stored) => {
+                    if (!serverIds.has(stored.id) && !stored.is_deleted) {
+                        updateMessage(channelId, stored.id, { is_deleted: true });
+                        deleted++;
+                    }
+                });
+
+                // ── Step 2: add new messages / sync edits ────────────────────────────────
+                incoming.forEach((msg: Message) => {
+                    const existing = existingMap.get(msg.id);
+
+                    if (!existing) {
+                        // Brand new message — add it
+                        addMessage(channelId, msg);
+                        added++;
+                    } else {
+                        // Already in store — sync edit/content changes
+                        const editedChanged = existing.is_edited !== msg.is_edited;
+                        const contentChanged = existing.content !== msg.content;
+
+                        if (editedChanged || contentChanged) {
+                            updateMessage(channelId, msg.id, {
+                                is_edited: msg.is_edited,
+                                content: msg.content,
+                            });
+                            updated++;
+                        }
+                    }
+                });
+
+                if (added > 0 || deleted > 0 || updated > 0) {
+                    console.log(`[Poll] channel ${channelId}: +${added} new, ✗${deleted} deleted, ~${updated} edited`);
+                }
+            }
+        } catch (err) {
+            // Silent fail — polling will retry next interval
+        }
+    }, [addMessage, updateMessage]);
+
+    // Start/stop polling when active channel changes
+    useEffect(() => {
+        // Clear any previous polling interval
+        if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+        }
+
+        if (!activeChannelId) {
+            setIsPolling(false);
+            return;
+        }
+
+        setIsPolling(true);
+        // Start polling every 3 seconds
+        pollingRef.current = setInterval(() => {
+            pollMessages(activeChannelId);
+        }, 3000);
+
+        return () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+            }
+            setIsPolling(false);
+        };
+    }, [activeChannelId, pollMessages]);
 
     // Load channels on mount
     useEffect(() => {
@@ -719,6 +817,31 @@ function ChatContent() {
         }
     };
 
+    const handleOpenScheduleModal = async () => {
+        const projectId = activeChannel?.project_id;
+        if (projectId) {
+            try {
+                const token = redisChatAPI.getToken();
+                const res = await fetch(`${API_URL}/projects/${projectId}/sprints`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.data?.sprints) {
+                    setProjectSprints(data.data.sprints.map((s: any) => ({
+                        id: s.sprint_id,
+                        name: s.sprint_name,
+                        project_id: projectId
+                    })));
+                }
+            } catch (e) {
+                console.warn('Failed to fetch sprints for channel project', e);
+            }
+        } else {
+            setProjectSprints([]);
+        }
+        setShowScheduleMeetingModal(true);
+    };
+
     const handleDeleteChannel = async () => {
         if (!activeChannelId) return;
 
@@ -764,10 +887,19 @@ function ChatContent() {
                         {/* Chat Header */}
                         <div className="bg-white border-b border-gray-200 px-6 py-4">
                             <div className="flex items-center justify-between">
-                                <div>
-                                    <h1 className="text-xl font-semibold text-gray-900">{activeChannel.name}</h1>
-                                    {activeChannel.description && (
-                                        <p className="text-sm text-gray-500">{activeChannel.description}</p>
+                                <div className="flex items-center gap-3">
+                                    <div>
+                                        <h1 className="text-xl font-semibold text-gray-900">{activeChannel.name}</h1>
+                                        {activeChannel.description && (
+                                            <p className="text-sm text-gray-500">{activeChannel.description}</p>
+                                        )}
+                                    </div>
+                                    {/* Live polling indicator */}
+                                    {isPolling && (
+                                        <span className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                            <span className="text-[11px] font-medium text-green-700">Live</span>
+                                        </span>
                                     )}
                                 </div>
 
@@ -784,7 +916,19 @@ function ChatContent() {
                                         Transcripts
                                     </button>
 
-                                    {/* Start Meeting Button */}
+                                    {/* Schedule Meeting Button */}
+                                    <button
+                                        onClick={handleOpenScheduleModal}
+                                        className="flex items-center gap-2 px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+                                        title="Schedule a meeting for this channel"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        Schedule
+                                    </button>
+
+                                    {/* Start Meeting Button (Meet Now) */}
                                     <button
                                         onClick={handleOpenMeetingModal}
                                         className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -822,10 +966,10 @@ function ChatContent() {
                                         </button>
                                     )}
 
-                                    {/* Connection status */}
-                                    <span className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : 'text-gray-400'}`}>
-                                        <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-600' : 'bg-gray-400'}`} />
-                                        {isConnected ? 'Connected' : 'Redis'}
+                                    {/* Backend status */}
+                                    <span className="flex items-center gap-2 text-sm text-gray-400">
+                                        <span className="w-2 h-2 rounded-full bg-gray-400" />
+                                        Redis
                                     </span>
                                     <span className="text-sm text-gray-500">
                                         {activeChannel.member_count} members
@@ -1349,14 +1493,44 @@ function ChatContent() {
                     </div>
                 </div>
             )}
+            {/* ── Schedule Meeting Modal ─────────────────────────────── */}
+            {showScheduleMeetingModal && (
+                <ScheduleMeetingModal
+                    onClose={() => setShowScheduleMeetingModal(false)}
+                    defaultProjectId={activeChannel?.project_id ?? undefined}
+                    lockProject={!!activeChannel?.project_id}
+                    projects={projects.map((p) => ({ id: p.project_id, name: p.project_name }))}
+                    sprints={projectSprints}
+                    onSuccess={(meeting) => {
+                        setShowScheduleMeetingModal(false);
+                        // Show toast
+                        setScheduleToast(`📅 Meeting scheduled: ${meeting.title}`);
+                        setTimeout(() => setScheduleToast(null), 4000);
+                        // Post meeting link into channel so the team sees it
+                        if (activeChannelId) {
+                            handleSendMessage(
+                                `📅 *Meeting Scheduled*\n` +
+                                `*${meeting.title}* (${meeting.meeting_category})\n` +
+                                `📆 ${meeting.meeting_date}  🕐 ${meeting.start_time} – ${meeting.end_time}`
+                            );
+                        }
+                    }}
+                />
+            )}
+
+            {/* ── Schedule Meeting Toast ─────────────────────────────── */}
+            {scheduleToast && (
+                <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg">
+                    <svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    {scheduleToast}
+                </div>
+            )}
         </div>
     );
 }
 
 export default function ChatPage() {
-    return (
-        <WebSocketProvider>
-            <ChatContent />
-        </WebSocketProvider>
-    );
+    return <ChatContent />;
 }
