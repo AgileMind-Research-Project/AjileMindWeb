@@ -25,61 +25,33 @@ export default function TaskUpdatesPage() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [meetingsData, updatesData, transcriptsData] = await Promise.all([
+            const [meetingsData, updatesData] = await Promise.all([
                 meetingsApi.listMeetings(),
                 taskUpdatesApi.listUpdates(undefined, filterStatus),
-                transcriptsApi.listDailyStandups()
             ]);
 
-            // Map transcripts to Meeting compatible objects
-            const transcriptMeetings: Meeting[] = transcriptsData.transcripts.map(t => ({
-                id: -t.id, // Negative to avoid ID collision
-                meeting_id: `transcript-${t.id}`,
-                project_id: t.project_id || null, // Use project ID if available
-                title: t.title || `Daily Standup - ${t.transcript_date}`,
-                description: 'Imported Transcript',
-                date: t.transcript_date,
-                start_time: '09:00', // Default
-                end_time: '09:30', // Default
-                status: 'COMPLETED',
-                category: 'DAILY_STANDUP',
-                created_at: t.created_at,
-                created_by: 'system',
-                meeting_transcript: t.transcript_content || '',
-                attendees: []
-            } as unknown as Meeting)); // Type assertion because we are adding a custom meeting
+            // Sort: Daily Standup first, then by date DESC
+            const sortedMeetings = meetingsData.sort((a, b) => {
+                const aCat = (a.meeting_category || '').toLowerCase();
+                const bCat = (b.meeting_category || '').toLowerCase();
+                const aIsDaily = aCat.includes('daily') || aCat.includes('standup');
+                const bIsDaily = bCat.includes('daily') || bCat.includes('standup');
 
-            // Filter logic: Deduplicate by meeting_id
-            // Use a Map to keep unique meetings, preferring meetingsData over transcriptMeetings if there's a collision
-            const meetingMap = new Map<string, Meeting>();
+                if (aIsDaily && !bIsDaily) return -1;
+                if (!aIsDaily && bIsDaily) return 1;
 
-            meetingsData.forEach(m => meetingMap.set(m.meeting_id.toString(), m));
-            transcriptMeetings.forEach(m => {
-                if (!meetingMap.has(m.meeting_id.toString())) {
-                    meetingMap.set(m.meeting_id.toString(), m);
-                }
+                // Then sort by date DESC
+                return new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime();
             });
 
-            const allPotentialMeetings = Array.from(meetingMap.values());
-
-            const relevantMeetings = allPotentialMeetings.filter(m => {
-                // If we filter by status, we check if this meeting has Any updates matching that status
-                // Or if we are in catch-all mode (PENDING usually implies show things that need attention)
-
-                // Check if any updates exist for this meeting
+            // Filter based on status tab
+            const relevantMeetings = sortedMeetings.filter(m => {
                 const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id.toString());
-
                 if (filterStatus === 'ALL') return true;
-
-                // If filtering by PENDING, show meetings that have pending updates OR are IN_PROGRESS
                 const hasMatchingUpdates = meetingUpdates.some(u => u.approval_status === filterStatus);
-                const isPendingRelevant = filterStatus === 'PENDING' && (m.status === 'IN_PROGRESS' || m.category === 'DAILY_STANDUP');
-
-                return hasMatchingUpdates || isPendingRelevant || (m.status === 'COMPLETED' && m.category === 'DAILY_STANDUP');
+                const hasDailyCategory = (m.meeting_category || '').toLowerCase().includes('daily') || (m.meeting_category || '').toLowerCase().includes('standup');
+                return hasMatchingUpdates || hasDailyCategory || m.transcript_content;
             });
-
-            // Sort by date DESC
-            relevantMeetings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
             setMeetings(relevantMeetings);
             setUpdates(updatesData);
@@ -99,9 +71,7 @@ export default function TaskUpdatesPage() {
         await new Promise(resolve => setTimeout(resolve, 800));
 
         try {
-            // Check if it's a transcript-based meeting
             let meetingIdToExtract = meeting.meeting_id;
-
             const result = await taskUpdatesApi.extractFromMeeting(meetingIdToExtract, true);
             toast.success(`✓ Extracted ${result.total_extracted} task updates in ${result.processing_time_ms.toFixed(0)}ms`);
             loadData();
@@ -116,8 +86,6 @@ export default function TaskUpdatesPage() {
 
     const handleApprove = async (update: TaskUpdate) => {
         try {
-            // Check Jira status via hook is handled in the modal component now
-            // This is a direct calls fallback or used by other components
             await taskUpdatesApi.approveUpdate(update.id);
             toast.success(`Approved ${update.ticket_id}`);
             loadData();
@@ -148,9 +116,42 @@ export default function TaskUpdatesPage() {
         return colors[status] || 'bg-gray-100 text-gray-700';
     };
 
+    const getCategoryColor = (category: string) => {
+        const cat = (category || '').toLowerCase();
+        if (cat.includes('daily') || cat.includes('standup')) return 'bg-purple-100 text-purple-700';
+        if (cat.includes('sprint') && cat.includes('plan')) return 'bg-blue-100 text-blue-700';
+        if (cat.includes('retro')) return 'bg-orange-100 text-orange-700';
+        if (cat.includes('review')) return 'bg-green-100 text-green-700';
+        return 'bg-gray-100 text-gray-700';
+    };
+
     const getParticipantCount = (meeting: Meeting) => {
         if (Array.isArray(meeting.attendees)) return meeting.attendees.length;
         return 0;
+    };
+
+    const formatTime = (timeValue: string | number | undefined) => {
+        if (!timeValue && timeValue !== 0) return 'N/A';
+
+        if (!isNaN(Number(timeValue))) {
+            const totalSeconds = Number(timeValue);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const formattedHours = hours % 12 || 12;
+            const formattedMinutes = minutes.toString().padStart(2, '0');
+            return `${formattedHours}:${formattedMinutes} ${ampm}`;
+        }
+
+        if (typeof timeValue === 'string' && timeValue.includes(':')) {
+            const [h, m] = timeValue.split(':');
+            const hours = parseInt(h, 10);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const formattedHours = hours % 12 || 12;
+            return `${formattedHours}:${m} ${ampm}`;
+        }
+
+        return String(timeValue);
     };
 
     if (loading) {
@@ -214,10 +215,11 @@ export default function TaskUpdatesPage() {
                             </div>
                         ) : (
                             meetings.map((meeting) => {
-                                const meetingUpdates = updates.filter(u => u.meeting_id === meeting.meeting_id.toString()); // Ensure string comparison
+                                const meetingUpdates = updates.filter(u => u.meeting_id === meeting.meeting_id.toString());
+                                const hasTranscript = !!meeting.transcript_content;
                                 return (
                                     <div
-                                        key={`meeting-${meeting.meeting_id}`} // Use meeting_id for key
+                                        key={`meeting-${meeting.meeting_id}`}
                                         onClick={() => setViewingMeeting(meeting)}
                                         className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden flex flex-col h-full"
                                     >
@@ -227,17 +229,33 @@ export default function TaskUpdatesPage() {
                                             </svg>
                                         </div>
 
-                                        <div className="flex justify-between items-start mb-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold 
+                                        <div className="flex justify-between items-start mb-3">
+                                            {/* Meeting Category Badge */}
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getCategoryColor(meeting.meeting_category)}`}>
+                                                {meeting.meeting_category || 'Meeting'}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                {hasTranscript && (
+                                                    <span className="text-xs font-medium bg-green-50 text-green-700 px-2 py-0.5 rounded-full border border-green-100">
+                                                        📝 Transcript
+                                                    </span>
+                                                )}
+                                                {meetingUpdates.length > 0 && (
+                                                    <span className="text-xs font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                                                        {meetingUpdates.length} Updates
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Status Badge */}
+                                        <div className="mb-2">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold 
                                                 ${meeting.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                                                    meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                    meeting.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                                        meeting.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
                                                 {meeting.status}
                                             </span>
-                                            {meetingUpdates.length > 0 && (
-                                                <span className="text-xs font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
-                                                    {meetingUpdates.length} Updates
-                                                </span>
-                                            )}
                                         </div>
 
                                         <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">{meeting.title}</h3>
@@ -247,7 +265,7 @@ export default function TaskUpdatesPage() {
                                                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                 </svg>
-                                                {meeting.date} • {meeting.start_time}
+                                                {meeting.meeting_date} • {formatTime(meeting.start_time)}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,7 +344,7 @@ export default function TaskUpdatesPage() {
                     }}
                     // Extraction Features
                     extractionMode={true}
-                    tasks={viewingMeeting ? updates.filter(u => u.meeting_id === viewingMeeting.meeting_id.toString()) : []} // Ensure string comparison
+                    tasks={viewingMeeting ? updates.filter(u => u.meeting_id === viewingMeeting.meeting_id.toString()) : []}
                     onExtract={() => viewingMeeting && handleExtract(viewingMeeting)}
                     onApprove={handleApprove}
                     onReject={handleReject}
