@@ -600,13 +600,17 @@ export default function ViewMeetingModal({
                                                                             </div>
 
                                                                             {/* Status Badge */}
-                                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                                                task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                                                                    task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                                                        'bg-gray-50 text-gray-600 border-gray-100'
-                                                                                }`}>
-                                                                                {task.status.replace('_', ' ')}
-                                                                            </span>
+                                                                            {task.is_jira ? (
+                                                                                <JiraStatusBadge ticketId={task.id} />
+                                                                            ) : (
+                                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
+                                                                                    task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                                                        task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                                                            'bg-gray-50 text-gray-600 border-gray-100'
+                                                                                    }`}>
+                                                                                    {task.status?.replace('_', ' ') || 'Unknown'}
+                                                                                </span>
+                                                                            )}
                                                                         </div>
 
                                                                         {/* Summary */}
