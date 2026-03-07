@@ -219,13 +219,15 @@ export default function ViewMeetingModal({
                                         {meeting.attendees.map((attendee, index) => {
                                             const colors = ['bg-blue-100 text-blue-700', 'bg-green-100 text-green-700', 'bg-purple-100 text-purple-700', 'bg-orange-100 text-orange-700'];
                                             const colorClass = colors[index % colors.length];
-                                            const displayName = (typeof attendee === 'string' ? attendee : String(attendee || '')) || 'User';
+                                            const displayName = typeof attendee === 'string' ? attendee :
+                                                (attendee && typeof attendee === 'object' ? ((attendee as any).email || (attendee as any).username || (attendee as any).name || String(attendee)) : 'User');
+                                            const safeDisplayName = String(displayName);
                                             return (
                                                 <div key={index} className="flex items-center gap-3 p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${colorClass}`}>
-                                                        {displayName.substring(0, 2).toUpperCase()}
+                                                        {safeDisplayName.substring(0, 2).toUpperCase()}
                                                     </div>
-                                                    <span className="text-sm font-medium text-gray-700 truncate">{displayName}</span>
+                                                    <span className="text-sm font-medium text-gray-700 truncate">{safeDisplayName}</span>
                                                 </div>
                                             )
                                         })}
@@ -400,7 +402,7 @@ export default function ViewMeetingModal({
                                                             </div>
 
                                                             {/* AI Reasoning Expander (Simplified) */}
-                                                            {task.ai_reasoning && (
+                                                            {task.ai_reasoning && !task.ai_reasoning.includes("No explicit status, defaulting to IN_PROGRESS") && (
                                                                 <details className="mt-3 text-xs">
                                                                     <summary className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium select-none">Show AI Reasoning</summary>
                                                                     <div className="mt-2 p-3 bg-blue-50/50 rounded-lg text-gray-700 leading-relaxed border border-blue-100">

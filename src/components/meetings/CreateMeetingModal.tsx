@@ -41,12 +41,12 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
 
                 setFormData({
                     title: meeting.title,
-                    description: meeting.description || '',
+                    description: (meeting as any).description || '',
                     project_id: meeting.project_id,
-                    date: meeting.date,
+                    date: (meeting as any).date || meeting.meeting_date || new Date().toISOString().split('T')[0],
                     start_time: formatTime(meeting.start_time),
                     end_time: formatTime(meeting.end_time),
-                    category: meeting.category || 'Daily Meeting',
+                    category: (meeting as any).category || meeting.meeting_category || 'Daily Meeting',
                     attendees: meeting.attendees || []
                 });
 
@@ -356,11 +356,14 @@ export default function CreateMeetingModal({ isOpen, onClose, onSuccess, meeting
                                     </div>
                                 ) : formData.attendees && formData.attendees.length > 0 ? (
                                     <div className="flex flex-wrap gap-2">
-                                        {formData.attendees.map((email, i) => (
-                                            <span key={i} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                {email}
-                                            </span>
-                                        ))}
+                                        {formData.attendees.map((email, i) => {
+                                            const displayEmail = typeof email === 'string' ? email : (email as any).email || (email as any).username || String(email);
+                                            return (
+                                                <span key={i} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                    {displayEmail}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-sm text-gray-500 italic">Select a project to automatically assign team members.</p>
