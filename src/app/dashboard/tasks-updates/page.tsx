@@ -168,26 +168,10 @@ export default function TaskUpdatesPage() {
         <DashboardLayout>
             <div className="p-8">
                 {/* Header */}
-                <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="mb-8 flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">AI Task Updates</h1>
                         <p className="text-gray-600 mt-2">Extract and approve task status updates from meeting transcripts using AI.</p>
-                    </div>
-
-                    {/* Status Filters */}
-                    <div className="bg-white p-1 rounded-lg border border-gray-200 shadow-sm flex items-center">
-                        {(['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterStatus === status
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'text-gray-600 hover:bg-gray-50'
-                                    }`}
-                            >
-                                {status.charAt(0) + status.slice(1).toLowerCase()}
-                            </button>
-                        ))}
                     </div>
                 </div>
 
@@ -197,6 +181,22 @@ export default function TaskUpdatesPage() {
                         <div className="flex items-center gap-3">
                             <h2 className="text-lg font-bold text-gray-900">Meetings</h2>
                             <span className="text-sm bg-blue-100 text-blue-800 px-3 py-0.5 rounded-full font-medium">{meetings.length}</span>
+                        </div>
+
+                        {/* Status Filters */}
+                        <div className="bg-white p-1 rounded-lg border border-gray-200 shadow-sm flex items-center">
+                            {(['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).map((status) => (
+                                <button
+                                    key={status}
+                                    onClick={() => setFilterStatus(status)}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${filterStatus === status
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {status.charAt(0) + status.slice(1).toLowerCase()}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
