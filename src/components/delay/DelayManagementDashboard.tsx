@@ -80,6 +80,7 @@ interface DelayAnalysis {
 
     // Sprint delay metrics
     planned_total_sprints: number;
+    total_sprints: number;
     completed_sprints: number;
     forecasted_remaining_sprints: number;
     forecasted_total_sprints: number;
@@ -130,6 +131,9 @@ export default function DelayManagementDashboard() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showSprintBreakdown, setShowSprintBreakdown] = useState(false);
+    const [llmSuggestions, setLlmSuggestions] = useState<string[]>([]);
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [llmError, setLlmError] = useState<string | null>(null);
 
     // Fetch projects
     useEffect(() => {
@@ -232,6 +236,32 @@ export default function DelayManagementDashboard() {
             setDelayData(null);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const generateAiSuggestions = async () => {
+        if (!selectedProject) return;
+        setLlmLoading(true);
+        setLlmError(null);
+        setLlmSuggestions([]);
+        try {
+            const authStorage = localStorage.getItem('auth-storage');
+            const token = JSON.parse(authStorage || '{}').state?.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const response = await fetch(
+                `${apiUrl}/api/v1/projects/${selectedProject}/delay-suggestions`,
+                { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            const result = await response.json();
+            if (!response.ok) {
+                setLlmError(result.detail || 'Failed to generate suggestions');
+            } else {
+                setLlmSuggestions(result.data?.suggestions || []);
+            }
+        } catch {
+            setLlmError('Network error while generating suggestions');
+        } finally {
+            setLlmLoading(false);
         }
     };
 
@@ -370,10 +400,10 @@ export default function DelayManagementDashboard() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-blue-100 text-sm font-medium">Sprint Progress</p>
-                                <p className="text-3xl font-bold mt-2">{delayData.completed_sprints ?? 0}/{(delayData.planned_total_sprints ?? 0).toFixed(0)}</p>
+                                <p className="text-3xl font-bold mt-2">{delayData.completed_sprints ?? 0}/{delayData.total_sprints ?? 0}</p>
                                 <p className="text-blue-100 text-xs mt-1">
-                                    {(delayData.planned_total_sprints ?? 0) > 0
-                                        ? (((delayData.completed_sprints ?? 0) / (delayData.planned_total_sprints ?? 1)) * 100).toFixed(1)
+                                    {(delayData.total_sprints ?? 0) > 0
+                                        ? (((delayData.completed_sprints ?? 0) / (delayData.total_sprints ?? 1)) * 100).toFixed(1)
                                         : 0}% complete
                                 </p>
                             </div>
@@ -741,61 +771,137 @@ export default function DelayManagementDashboard() {
             )}
 
             {/* ENHANCEMENT 5: Early Warning System */}
-            {delayData && delayData.early_warnings && delayData.early_warnings.length > 0 && (
+            {delayData && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                    <div className="bg-gradient-to-r from-red-600 to-orange-600 px-6 py-4">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-red-600 to-orange-600 px-6 py-4 flex items-center justify-between">
                         <h3 className="text-lg font-bold text-white flex items-center">
                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
-                            Early Warning System ({delayData.early_warnings.length} Alert{delayData.early_warnings.length !== 1 ? 's' : ''})
+                            Early Warning System
+                            {delayData.early_warnings && delayData.early_warnings.length > 0 && (
+                                <span className="ml-2 text-sm font-normal text-red-100">
+                                    ({delayData.early_warnings.length} Alert{delayData.early_warnings.length !== 1 ? 's' : ''})
+                                </span>
+                            )}
                         </h3>
+                        {/* Generate AI Suggestions Button */}
+                        <button
+                            onClick={generateAiSuggestions}
+                            disabled={llmLoading}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed border border-white/30"
+                        >
+                            {llmLoading ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                    </svg>
+                                    Generating suggestions...
+                                </>
+                            ) : (
+                                <>
+                                    <span>✨</span>
+                                    Suggestions
+                                </>
+                            )}
+                        </button>
                     </div>
 
-                    <div className="p-6">
-                        <div className="space-y-4">
-                            {delayData.early_warnings.map((warning, index) => (
-                                <div
-                                    key={index}
-                                    className={`rounded-lg p-4 border-l-4 ${warning.severity === 'CRITICAL' ? 'bg-red-50 border-red-500' :
-                                        warning.severity === 'HIGH' ? 'bg-orange-50 border-orange-500' :
-                                            warning.severity === 'MEDIUM' ? 'bg-yellow-50 border-yellow-500' :
-                                                'bg-blue-50 border-blue-500'
-                                        }`}
-                                >
-                                    <div className="flex items-start">
-                                        <div className="flex-shrink-0">
-                                            <span className="text-2xl">
-                                                {warning.severity === 'CRITICAL' && '🚨'}
-                                                {warning.severity === 'HIGH' && '⚠️'}
-                                                {warning.severity === 'MEDIUM' && '⚡'}
-                                                {warning.severity === 'LOW' && 'ℹ️'}
-                                            </span>
+                    {(
+                        (delayData.early_warnings && delayData.early_warnings.length > 0) ||
+                        llmLoading || llmError || llmSuggestions.length > 0
+                    ) && (
+                            <div className="p-6 space-y-5">
+                                {/* Existing Early Warnings */}
+                                {delayData.early_warnings && delayData.early_warnings.length > 0 && (
+                                    <div className="space-y-4">
+                                        {delayData.early_warnings.map((warning, index) => (
+                                            <div
+                                                key={index}
+                                                className={`rounded-lg p-4 border-l-4 ${warning.severity === 'CRITICAL' ? 'bg-red-50 border-red-500' :
+                                                    warning.severity === 'HIGH' ? 'bg-orange-50 border-orange-500' :
+                                                        warning.severity === 'MEDIUM' ? 'bg-yellow-50 border-yellow-500' :
+                                                            'bg-blue-50 border-blue-500'
+                                                    }`}
+                                            >
+                                                <div className="flex items-start">
+                                                    <div className="flex-shrink-0">
+                                                        <span className="text-2xl">
+                                                            {warning.severity === 'CRITICAL' && '🚨'}
+                                                            {warning.severity === 'HIGH' && '⚠️'}
+                                                            {warning.severity === 'MEDIUM' && '⚡'}
+                                                            {warning.severity === 'LOW' && 'ℹ️'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="ml-3 flex-1">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <h4 className="text-sm font-bold text-gray-900">{warning.type.replace(/_/g, ' ')}</h4>
+                                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${warning.severity === 'CRITICAL' ? 'bg-red-200 text-red-800' :
+                                                                warning.severity === 'HIGH' ? 'bg-orange-200 text-orange-800' :
+                                                                    warning.severity === 'MEDIUM' ? 'bg-yellow-200 text-yellow-800' :
+                                                                        'bg-blue-200 text-blue-800'
+                                                                }`}>
+                                                                {warning.severity}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-sm text-gray-700 mb-2">{warning.message}</p>
+                                                        <div className="bg-white bg-opacity-50 rounded p-2 mt-2">
+                                                            <p className="text-xs font-semibold text-gray-600 mb-1">💡 Recommendation:</p>
+                                                            <p className="text-xs text-gray-700">{warning.recommendation}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* LLM Error */}
+                                {llmError && (
+                                    <div className="rounded-lg p-4 bg-red-50 border border-red-200 text-sm text-red-700">
+                                        ⚠️ {llmError}
+                                    </div>
+                                )}
+
+                                {/* LLM Spinner */}
+                                {llmLoading && (
+                                    <div className="flex flex-col items-center justify-center py-8 gap-3">
+                                        <svg className="w-10 h-10 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                        </svg>
+                                        <p className="text-sm font-medium text-gray-600">Generating suggestions...</p>
+                                        <p className="text-xs text-gray-400">AI is analysing delay data, this may take a moment</p>
+                                    </div>
+                                )}
+
+                                {/* AI Suggestions */}
+                                {!llmLoading && llmSuggestions.length > 0 && (
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-lg">✨</span>
+                                            <h4 className="text-sm font-bold text-gray-800">AI Recovery Suggestions</h4>
+                                            <span className="text-xs text-gray-400 italic">powered by llama3.2</span>
                                         </div>
-                                        <div className="ml-3 flex-1">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <h4 className="text-sm font-bold text-gray-900">{warning.type.replace(/_/g, ' ')}</h4>
-                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${warning.severity === 'CRITICAL' ? 'bg-red-200 text-red-800' :
-                                                    warning.severity === 'HIGH' ? 'bg-orange-200 text-orange-800' :
-                                                        warning.severity === 'MEDIUM' ? 'bg-yellow-200 text-yellow-800' :
-                                                            'bg-blue-200 text-blue-800'
-                                                    }`}>
-                                                    {warning.severity}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-gray-700 mb-2">{warning.message}</p>
-                                            <div className="bg-white bg-opacity-50 rounded p-2 mt-2">
-                                                <p className="text-xs font-semibold text-gray-600 mb-1">💡 Recommendation:</p>
-                                                <p className="text-xs text-gray-700">{warning.recommendation}</p>
-                                            </div>
+                                        <div className="space-y-3">
+                                            {llmSuggestions.map((suggestion, idx) => (
+                                                <div key={idx} className="flex gap-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 rounded-lg p-4">
+                                                    <span className="flex-shrink-0 w-6 h-6 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                                                        {idx + 1}
+                                                    </span>
+                                                    <p className="text-sm text-gray-800 leading-relaxed">{suggestion}</p>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                                )}
+                            </div>
+                        )}
                 </div>
             )}
+
 
             {/* Sprint Breakdown Section */}
             {delayData && delayData.sprint_breakdown && delayData.sprint_breakdown.length > 0 && (
@@ -862,8 +968,8 @@ export default function DelayManagementDashboard() {
                                                     <span className="text-xs font-semibold text-gray-700">{(sprint.completion_rate ?? 0).toFixed(0)}%</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{(sprint.velocity ?? 0).toFixed(1)}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-600">{(sprint.availability ?? 0).toFixed(1)}%</td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{Number(sprint.velocity ?? 0).toFixed(1)}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">{Number(sprint.availability ?? 0).toFixed(1)}%</td>
                                         </tr>
                                     ))}
                                 </tbody>
