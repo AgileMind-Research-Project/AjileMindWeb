@@ -18,6 +18,12 @@ interface BacklogItem {
     severity: string | null;
 }
 
+interface SubtaskGroup {
+    parent_task_id: string;
+    parent_summary: string;
+    subtasks: BacklogItem[];
+}
+
 interface SubtaskModalProps {
     projectId: number;
     projectName: string;
@@ -83,7 +89,7 @@ export default function SubtaskModal({
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
             const response = await fetch(
-                `${apiUrl}/api/v1/backlog/project/${projectId}`,
+                `${apiUrl}/api/v1/backlog/project/${projectId}/subtask`,
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -95,14 +101,25 @@ export default function SubtaskModal({
             if (response.ok) {
                 const data = await response.json();
                 if (data.success) {
-                    setItems(data.data || []);
+                    const fetchedGroups: SubtaskGroup[] = data.data?.groups || [];
+
+                    // Rebuild a flat items array: synthetic parent + subtask entries
+                    // so all existing edit/delete/merge/render logic continues to work.
+                    const flatItems: BacklogItem[] = [];
+                    fetchedGroups.forEach((group) => {
+                        // Synthetic parent task entry (needed for accordion headers)
+                        
+                        // Actual subtask entries
+                        group.subtasks.forEach((s) => flatItems.push(s));
+                    });
+                    setItems(flatItems);
                 }
             } else {
-                throw new Error('Failed to fetch backlog');
+                throw new Error('Failed to fetch subtasks');
             }
         } catch (error) {
-            console.error('Error fetching backlog:', error);
-            ToastService.showError('Failed to load backlog items');
+            console.error('Error fetching subtasks:', error);
+            ToastService.showError('Failed to load subtasks');
         } finally {
             setLoading(false);
         }
@@ -494,8 +511,8 @@ export default function SubtaskModal({
                                 <svg className="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                 </svg>
-                                <h3 className="mt-4 text-lg font-medium text-gray-900">No Backlog Items</h3>
-                                <p className="mt-2 text-gray-500">This project has no backlog items yet.</p>
+                                <h3 className="mt-4 text-lg font-medium text-gray-900">No Subtasks Found</h3>
+                                <p className="mt-2 text-gray-500">This project has no subtasks yet.</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
