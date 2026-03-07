@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { releaseNotesApi, ReleaseNote, CreateReleaseNoteRequest, ReleaseNoteContent } from '@/lib/api/release-notes.api';
+import { releaseNotesApi, ReleaseNote, CreateReleaseNoteRequest, ReleaseNoteContent, BacklogRelease } from '@/lib/api/release-notes.api';
 import { projectsApi } from '@/lib/api/projects.api';
 import { toast } from 'sonner';
 
@@ -10,6 +10,7 @@ const ReleaseNotes: React.FC = () => {
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState<number | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>('');
+    const [backlogReleases, setBacklogReleases] = useState<BacklogRelease[]>([]);
 
     // Form state
     const [formData, setFormData] = useState<CreateReleaseNoteRequest>({
@@ -18,6 +19,8 @@ const ReleaseNotes: React.FC = () => {
         title: '',
         release_date: null,
         release_type: 'MINOR',
+        start_sprint: null,
+        end_sprint: null,
         content: {
             features: [],
             bug_fixes: [],
@@ -36,6 +39,7 @@ const ReleaseNotes: React.FC = () => {
     useEffect(() => {
         loadProjects();
         loadReleaseNotes();
+        loadBacklogReleases();
     }, [selectedProject, statusFilter]);
 
     const loadProjects = async () => {
@@ -59,6 +63,17 @@ const ReleaseNotes: React.FC = () => {
             toast.error('Failed to load release notes');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadBacklogReleases = async () => {
+        try {
+            const response = selectedProject
+                ? await releaseNotesApi.listBacklogReleases(selectedProject)
+                : await releaseNotesApi.listAllBacklogReleases();
+            setBacklogReleases(Array.isArray(response) ? response : []);
+        } catch (error) {
+            console.error('Failed to load backlog releases:', error);
         }
     };
 
@@ -135,6 +150,27 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
+    const handleConvertFromBacklog = (item: BacklogRelease) => {
+        setFormData({
+            project_id: item.project_id,
+            version: item.id.includes('-') ? item.id : '1.0.0', // Default if not a Jira key
+            title: item.summary,
+            release_date: item.end_date ? item.end_date.split(' ')[0] : null,
+            release_type: 'MINOR',
+            start_sprint: null,
+            end_sprint: null,
+            content: {
+                features: [],
+                bug_fixes: [],
+                improvements: [],
+                breaking_changes: [],
+                known_issues: []
+            },
+            summary: item.description || ''
+        });
+        setShowModal(true);
+    };
+
     const resetForm = () => {
         setFormData({
             project_id: 0,
@@ -142,6 +178,8 @@ const ReleaseNotes: React.FC = () => {
             title: '',
             release_date: null,
             release_type: 'MINOR',
+            start_sprint: null,
+            end_sprint: null,
             content: {
                 features: [],
                 bug_fixes: [],
@@ -181,112 +219,217 @@ const ReleaseNotes: React.FC = () => {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-900">✨ AI Automate Release Note Generate</h1>
+        <div className="p-4 max-w-7xl mx-auto">
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
+                <div>
+                    <h1 className="text-lg font-medium text-gray-900 mb-1">
+                        Release Notes
+                    </h1>
+                    <p className="text-sm text-gray-600">Manage release notes and backlog releases.</p>
+                </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 transition-colors"
                 >
-                    + Create Release Note
+                    + Create New Release
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex gap-4">
-                <select
-                    value={selectedProject || ''}
-                    onChange={(e) => setSelectedProject(Number(e.target.value) || null)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg"
-                >
-                    <option value="">All Projects</option>
-                    {projects.map(p => (
-                        <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
-                    ))}
-                </select>
+            {/* Premium Controls Row */}
+            <div className="bg-white/50 backdrop-blur-md rounded-lg shadow-sm border border-gray-100 p-3 mb-4 flex flex-col md:flex-row gap-3 sticky top-6 z-10">
+                <div className="flex-1 flex gap-2">
+                    <select
+                        value={selectedProject || ''}
+                        onChange={(e) => setSelectedProject(Number(e.target.value) || null)}
+                        className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-sm"
+                    >
+                        <option value="">All Projects</option>
+                        {projects.map(p => (
+                            <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+                        ))}
+                    </select>
 
-                <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg"
-                >
-                    <option value="">All Status</option>
-                    <option value="DRAFT">Draft</option>
-                    <option value="PUBLISHED">Published</option>
-                    <option value="ARCHIVED">Archived</option>
-                </select>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-gray-200 rounded focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-sm"
+                    >
+                        <option value="">All Status</option>
+                        <option value="DRAFT">Draft</option>
+                        <option value="PUBLISHED">Published</option>
+                        <option value="ARCHIVED">Archived</option>
+                    </select>
+                </div>
             </div>
 
-            {/* Release Notes List */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                {loading ? (
-                    <div className="p-8 text-center text-gray-500">Loading...</div>
-                ) : releaseNotes.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">No release notes found</div>
-                ) : (
+            {/* Backlog Planning Section */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-medium text-gray-800 flex items-center gap-2">
+                        <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded flex items-center justify-center text-sm">📅</span>
+                        Planned Releases (Backlog)
+                        <span className="text-sm text-gray-400 ml-2">({backlogReleases.length})</span>
+                    </h2>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="bg-gray-50 text-left border-b border-gray-200">
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Project</th>
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Key</th>
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Summary</th>
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Target Date</th>
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {backlogReleases.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
+                                    </tr>
+                                ) : (
+                                    backlogReleases.map(item => (
+                                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-3 py-2">
+                                                <span className="text-xs text-gray-600">
+                                                    {projects.find(p => p.project_id === item.project_id)?.project_name || `Project ${item.project_id}`}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <span className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                                    {item.id}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <div className="text-sm text-gray-900">{item.summary}</div>
+                                                <div className="text-xs text-gray-500 truncate max-w-[300px]">{item.description || 'No description'}</div>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <div className="text-xs text-gray-600">
+                                                    {item.end_date ? new Date(item.end_date).toLocaleDateString() : 'TBD'}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <span className={`text-xs px-1.5 py-0.5 rounded ${item.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                    }`}>
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
+                                                <button
+                                                    onClick={() => handleConvertFromBacklog(item)}
+                                                    className="px-2 py-1 bg-indigo-50 text-indigo-600 text-xs rounded hover:bg-indigo-600 hover:text-white transition-all"
+                                                >
+                                                    CREATE DRAFT
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {/* Official Release Notes Section */}
+            <div>
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-medium text-gray-800 flex items-center gap-2">
+                        <span className="w-6 h-6 bg-emerald-100 text-emerald-600 rounded flex items-center justify-center text-sm">📄</span>
+                        Official Release Notes
+                        <span className="text-sm text-gray-400 ml-2">({releaseNotes.length})</span>
+                    </h2>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
                     <table className="w-full">
-                        <thead className="bg-gray-50 border-b">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Version</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Title</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Project</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                        <thead>
+                            <tr className="bg-gray-50">
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Release Info</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Coverage</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {releaseNotes.map(note => (
-                                <tr key={note.id} className="border-b hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-mono text-sm text-blue-600">{note.version}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{note.title}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">
-                                        {projects.find(p => p.project_id === note.project_id)?.project_name || note.project_id}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${note.release_type === 'MAJOR' ? 'bg-red-100 text-red-700' :
-                                            note.release_type === 'MINOR' ? 'bg-blue-100 text-blue-700' :
-                                                note.release_type === 'PATCH' ? 'bg-green-100 text-green-700' :
-                                                    'bg-orange-100 text-orange-700'
-                                            }`}>
-                                            {note.release_type}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${note.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' :
-                                            note.status === 'DRAFT' ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
-                                            {note.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">
-                                        {note.release_date || new Date(note.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm">
-                                        <div className="flex gap-2">
-                                            {note.status === 'DRAFT' && (
+                        <tbody className="divide-y divide-gray-100">
+                            {loading ? (
+                                <tr><td colSpan={6} className="py-8 text-center text-gray-500 text-sm">Loading...</td></tr>
+                            ) : releaseNotes.length === 0 ? (
+                                <tr><td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No official release notes found.</td></tr>
+                            ) : (
+                                releaseNotes.map(note => (
+                                    <tr key={note.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-3 py-2">
+                                            <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded font-mono text-sm border border-indigo-200">
+                                                v{note.version}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <div className="text-sm text-gray-900">{note.title}</div>
+                                            <div className="text-xs text-gray-500">{projects.find(p => p.project_id === note.project_id)?.project_name || 'Project ' + note.project_id}</div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-xs ${note.release_type === 'MAJOR' ? 'bg-red-100 text-red-700' :
+                                                note.release_type === 'MINOR' ? 'bg-blue-100 text-blue-700' :
+                                                    note.release_type === 'PATCH' ? 'bg-green-100 text-green-700' :
+                                                        'bg-yellow-100 text-yellow-700'
+                                                }`}>
+                                                {note.release_type}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <div className="text-sm text-gray-600 flex items-center gap-1">
+                                                {(note as any).start_sprint ? (
+                                                    <>
+                                                        <span className="text-indigo-600">S{(note as any).start_sprint}</span>
+                                                        <span className="text-gray-400">→</span>
+                                                        <span className="text-indigo-600">S{(note as any).end_sprint || (note as any).start_sprint}</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-400">—</span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500">{note.release_date || new Date(note.created_at).toLocaleDateString()}</div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs ${note.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' :
+                                                note.status === 'DRAFT' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-gray-100 text-gray-700'
+                                                }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${note.status === 'PUBLISHED' ? 'bg-green-500' : note.status === 'DRAFT' ? 'bg-yellow-500' : 'bg-gray-500'}`}></span>
+                                                {note.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            <div className="flex justify-end gap-2 text-xs">
+                                                {note.status === 'DRAFT' && (
+                                                    <button
+                                                        onClick={() => handlePublish(note.id)}
+                                                        className="text-indigo-600 hover:text-indigo-800"
+                                                    >
+                                                        PUBLISH
+                                                    </button>
+                                                )}
                                                 <button
-                                                    onClick={() => handlePublish(note.id)}
-                                                    className="text-green-600 hover:text-green-800 text-xs font-medium"
+                                                    onClick={() => handleDelete(note.id)}
+                                                    className="text-gray-400 hover:text-red-500 transition-colors"
                                                 >
-                                                    Publish
+                                                    DELETE
                                                 </button>
-                                            )}
-                                            <button
-                                                onClick={() => handleDelete(note.id)}
-                                                className="text-red-600 hover:text-red-800 text-xs font-medium"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
-                )}
+                </div>
             </div>
 
             {/* Create Modal */}
@@ -363,6 +506,30 @@ const ReleaseNotes: React.FC = () => {
                                         type="date"
                                         value={formData.release_date || ''}
                                         onChange={(e) => setFormData({ ...formData, release_date: e.target.value || null })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Start Sprint</label>
+                                    <input
+                                        type="number"
+                                        placeholder="Sprint ID"
+                                        value={formData.start_sprint || ''}
+                                        onChange={(e) => setFormData({ ...formData, start_sprint: e.target.value ? Number(e.target.value) : null })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">End Sprint</label>
+                                    <input
+                                        type="number"
+                                        placeholder="Sprint ID"
+                                        value={formData.end_sprint || ''}
+                                        onChange={(e) => setFormData({ ...formData, end_sprint: e.target.value ? Number(e.target.value) : null })}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                                     />
                                 </div>
