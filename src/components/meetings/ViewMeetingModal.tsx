@@ -402,14 +402,14 @@ export default function ViewMeetingModal({
                                                             </div>
 
                                                             {/* AI Reasoning Expander (Simplified) */}
-                                                            {task.ai_reasoning && !task.ai_reasoning.includes("No explicit status, defaulting to IN_PROGRESS") && (
+                                                            {/* {task.ai_reasoning && !task.ai_reasoning.includes("No explicit status, defaulting to IN_PROGRESS") && (
                                                                 <details className="mt-3 text-xs">
                                                                     <summary className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium select-none">Show AI Reasoning</summary>
                                                                     <div className="mt-2 p-3 bg-blue-50/50 rounded-lg text-gray-700 leading-relaxed border border-blue-100">
                                                                         {task.ai_reasoning}
                                                                     </div>
                                                                 </details>
-                                                            )}
+                                                            )} */}
                                                         </div>
                                                     </div>
 
