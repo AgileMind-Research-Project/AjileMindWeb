@@ -39,7 +39,7 @@ export interface UpdateReleaseNoteRequest {
 
 export interface GenerateReleaseNoteRequest {
     project_id: number;
-    version: string;
+    version?: string;
     include_tasks?: boolean;
     since_date?: string | null;
     start_sprint?: number | null;

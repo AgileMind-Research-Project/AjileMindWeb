@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import { httpClient as apiClient } from '@/lib/api/http-client';
 
 export interface ReleaseNoteContent {
     features: string[];
@@ -29,9 +29,11 @@ export interface UpdateReleaseNoteRequest {
 
 export interface GenerateReleaseNoteRequest {
     project_id: number;
-    version: string;
+    version?: string;
     include_tasks?: boolean;
     since_date?: string | null;
+    start_sprint?: number | null;
+    end_sprint?: number | null;
 }
 
 export interface ReleaseNote {

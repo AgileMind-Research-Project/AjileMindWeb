@@ -113,7 +113,6 @@ const ReleaseNotes: React.FC = () => {
         try {
             const response = await releaseNotesApi.generateAI({
                 project_id: targetFormData.project_id,
-                version: targetFormData.version || 'v1.0.0',
                 include_tasks: true,
                 start_sprint: targetFormData.start_sprint,
                 end_sprint: targetFormData.end_sprint
