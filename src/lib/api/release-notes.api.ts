@@ -64,6 +64,7 @@ export interface ReleaseNote {
 export interface BacklogRelease {
     id: string;
     project_id: number;
+    sprint_id: number | null;
     summary: string;
     description: string | null;
     issue_type: string;

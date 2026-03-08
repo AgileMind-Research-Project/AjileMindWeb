@@ -11,6 +11,8 @@ const ReleaseNotes: React.FC = () => {
     const [selectedProject, setSelectedProject] = useState<number | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>('');
     const [backlogReleases, setBacklogReleases] = useState<BacklogRelease[]>([]);
+    const [selectedBacklogItem, setSelectedBacklogItem] = useState<BacklogRelease | null>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState<CreateReleaseNoteRequest>({
@@ -280,6 +282,7 @@ const ReleaseNotes: React.FC = () => {
                                 <tr className="bg-gray-50 text-left border-b border-gray-200">
                                     <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Project</th>
                                     <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Key</th>
+                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase text-center">Sprint</th>
                                     <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Summary</th>
                                     <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Target Date</th>
                                     <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -304,9 +307,14 @@ const ReleaseNotes: React.FC = () => {
                                                     {item.id}
                                                 </span>
                                             </td>
+                                            <td className="px-3 py-2 text-center">
+                                                <span className="text-xs font-bold text-gray-600">
+                                                    {item.sprint_id ? `S${item.sprint_id}` : '—'}
+                                                </span>
+                                            </td>
                                             <td className="px-3 py-2">
                                                 <div className="text-sm text-gray-900">{item.summary}</div>
-                                                <div className="text-xs text-gray-500 truncate max-w-[300px]">{item.description || 'No description'}</div>
+                                                <div className="text-xs text-gray-500 truncate max-w-[200px]">{item.description || 'No description'}</div>
                                             </td>
                                             <td className="px-3 py-2">
                                                 <div className="text-xs text-gray-600">
@@ -320,12 +328,30 @@ const ReleaseNotes: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className="px-3 py-2 text-right">
-                                                <button
-                                                    onClick={() => handleConvertFromBacklog(item)}
-                                                    className="px-2 py-1 bg-indigo-50 text-indigo-600 text-xs rounded hover:bg-indigo-600 hover:text-white transition-all"
-                                                >
-                                                    CREATE DRAFT
-                                                </button>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedBacklogItem(item);
+                                                            setShowDetailsModal(true);
+                                                        }}
+                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors"
+                                                        title="View Details"
+                                                    >
+                                                        👁️
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleConvertFromBacklog(item)}
+                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 text-xs rounded hover:bg-indigo-600 hover:text-white transition-all whitespace-nowrap"
+                                                    >
+                                                        PROCESS
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleConvertFromBacklog(item)}
+                                                        className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded hover:bg-gray-200 transition-all whitespace-nowrap"
+                                                    >
+                                                        CREATE DRAFT
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -436,12 +462,14 @@ const ReleaseNotes: React.FC = () => {
             {showModal && (
                 <div className="fixed inset-0 bg-white/30 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300" onClick={() => setShowModal(false)}>
                     <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
-                        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+                        {/* Modal Header */}
+                        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-20">
                             <h2 className="text-xl font-bold text-gray-900">Create Release Note</h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                         </div>
-
+                        {/* Modal Body */}
                         <div className="p-6 space-y-6">
+                            {/* Form fields... */}
                             {/* Project & Version */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -458,7 +486,6 @@ const ReleaseNotes: React.FC = () => {
                                         ))}
                                     </select>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Version *</label>
                                     <input
@@ -471,7 +498,6 @@ const ReleaseNotes: React.FC = () => {
                                     />
                                 </div>
                             </div>
-
                             {/* Title & Type */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
@@ -484,7 +510,6 @@ const ReleaseNotes: React.FC = () => {
                                     required
                                 />
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Release Type</label>
@@ -499,7 +524,6 @@ const ReleaseNotes: React.FC = () => {
                                         <option value="HOTFIX">Hotfix</option>
                                     </select>
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Release Date</label>
                                     <input
@@ -510,7 +534,6 @@ const ReleaseNotes: React.FC = () => {
                                     />
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Start Sprint</label>
@@ -522,7 +545,6 @@ const ReleaseNotes: React.FC = () => {
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                                     />
                                 </div>
-
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">End Sprint</label>
                                     <input
@@ -534,7 +556,6 @@ const ReleaseNotes: React.FC = () => {
                                     />
                                 </div>
                             </div>
-
                             {/* AI Generate Button */}
                             <button
                                 onClick={handleGenerateAI}
@@ -543,94 +564,32 @@ const ReleaseNotes: React.FC = () => {
                             >
                                 ✨ Generate with AI
                             </button>
-
-                            {/* Features */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Features</label>
-                                <div className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Add a new feature"
-                                        value={newFeature}
-                                        onChange={(e) => setNewFeature(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && addItem('features', newFeature)}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
-                                    />
-                                    <button
-                                        onClick={() => addItem('features', newFeature)}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                                    >
-                                        Add
-                                    </button>
+                            {/* Content sections (Features, Bug Fixes, etc.) */}
+                            <div className="space-y-4">
+                                {/* Features */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Features</label>
+                                    <div className="flex gap-2 mb-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Add a new feature"
+                                            value={newFeature}
+                                            onChange={(e) => setNewFeature(e.target.value)}
+                                            onKeyPress={(e) => e.key === 'Enter' && addItem('features', newFeature)}
+                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                        <button onClick={() => addItem('features', newFeature)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">Add</button>
+                                    </div>
+                                    <ul className="space-y-1">
+                                        {formData.content.features.map((item, i) => (
+                                            <li key={i} className="flex justify-between items-center bg-blue-50 px-3 py-2 rounded text-sm">
+                                                <span>{item}</span>
+                                                <button onClick={() => removeItem('features', i)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                                <ul className="space-y-1">
-                                    {formData.content.features.map((item, i) => (
-                                        <li key={i} className="flex justify-between items-center bg-blue-50 px-3 py-2 rounded text-sm">
-                                            <span>{item}</span>
-                                            <button onClick={() => removeItem('features', i)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                        </li>
-                                    ))}
-                                </ul>
                             </div>
-
-                            {/* Bug Fixes */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Bug Fixes</label>
-                                <div className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Add a bug fix"
-                                        value={newBugFix}
-                                        onChange={(e) => setNewBugFix(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && addItem('bug_fixes', newBugFix)}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
-                                    />
-                                    <button
-                                        onClick={() => addItem('bug_fixes', newBugFix)}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                                    >
-                                        Add
-                                    </button>
-                                </div>
-                                <ul className="space-y-1">
-                                    {formData.content.bug_fixes.map((item, i) => (
-                                        <li key={i} className="flex justify-between items-center bg-green-50 px-3 py-2 rounded text-sm">
-                                            <span>{item}</span>
-                                            <button onClick={() => removeItem('bug_fixes', i)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-
-                            {/* Improvements */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Improvements</label>
-                                <div className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Add an improvement"
-                                        value={newImprovement}
-                                        onChange={(e) => setNewImprovement(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && addItem('improvements', newImprovement)}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
-                                    />
-                                    <button
-                                        onClick={() => addItem('improvements', newImprovement)}
-                                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
-                                    >
-                                        Add
-                                    </button>
-                                </div>
-                                <ul className="space-y-1">
-                                    {formData.content.improvements.map((item, i) => (
-                                        <li key={i} className="flex justify-between items-center bg-purple-50 px-3 py-2 rounded text-sm">
-                                            <span>{item}</span>
-                                            <button onClick={() => removeItem('improvements', i)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-
                             {/* Summary */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Summary</label>
@@ -643,20 +602,72 @@ const ReleaseNotes: React.FC = () => {
                                 />
                             </div>
                         </div>
+                        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 z-10">
+                            <button onClick={() => setShowModal(false)} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
+                            <button onClick={handleCreate} disabled={loading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{loading ? 'Creating...' : 'Create Draft'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t flex justify-end gap-3">
+            {/* Backlog Item Details Modal */}
+            {showDetailsModal && selectedBacklogItem && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setShowDetailsModal(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center">
+                            <h3 className="text-white font-bold flex items-center gap-2">
+                                <span className="bg-white/20 px-2 py-0.5 rounded text-xs">DETAILS</span>
+                                {selectedBacklogItem.id}: {selectedBacklogItem.summary}
+                            </h3>
+                            <button onClick={() => setShowDetailsModal(false)} className="text-white/80 hover:text-white text-xl">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Project</p>
+                                    <p className="text-sm font-medium text-gray-800">
+                                        {projects.find(p => p.project_id === selectedBacklogItem.project_id)?.project_name || `Project ${selectedBacklogItem.project_id}`}
+                                    </p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sprint</p>
+                                    <p className="text-sm font-medium text-indigo-600">S{selectedBacklogItem.sprint_id || 'N/A'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Target Date</p>
+                                    <p className="text-sm font-medium text-gray-800">
+                                        {selectedBacklogItem.end_date ? new Date(selectedBacklogItem.end_date).toLocaleDateString() : 'TBD'}
+                                    </p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</p>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${selectedBacklogItem.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                        {selectedBacklogItem.status}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="pt-4 border-t border-gray-100">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Description</p>
+                                <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                                    {selectedBacklogItem.description || "No detailed description provided for this release item."}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
                             <button
-                                onClick={() => setShowModal(false)}
-                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100"
+                                onClick={() => {
+                                    handleConvertFromBacklog(selectedBacklogItem);
+                                    setShowDetailsModal(false);
+                                }}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors"
                             >
-                                Cancel
+                                START PROCESS
                             </button>
                             <button
-                                onClick={handleCreate}
-                                disabled={loading}
-                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                onClick={() => setShowDetailsModal(false)}
+                                className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100"
                             >
-                                {loading ? 'Creating...' : 'Create Draft'}
+                                CLOSE
                             </button>
                         </div>
                     </div>
