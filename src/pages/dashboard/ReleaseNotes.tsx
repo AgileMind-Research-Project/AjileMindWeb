@@ -124,7 +124,8 @@ const ReleaseNotes: React.FC = () => {
                 ...prev,
                 content: response.content,
                 summary: response.summary,
-                release_type: response.release_type || prev.release_type
+                release_type: response.release_type || prev.release_type,
+                version: response.suggested_version || prev.version
             }));
             setHasGeneratedContent(true);
 
