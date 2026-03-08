@@ -42,6 +42,8 @@ export interface GenerateReleaseNoteRequest {
     version: string;
     include_tasks?: boolean;
     since_date?: string | null;
+    start_sprint?: number | null;
+    end_sprint?: number | null;
 }
 
 export interface ReleaseNote {

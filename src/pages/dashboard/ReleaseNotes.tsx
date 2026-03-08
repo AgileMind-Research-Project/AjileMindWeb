@@ -13,6 +13,9 @@ const ReleaseNotes: React.FC = () => {
     const [backlogReleases, setBacklogReleases] = useState<BacklogRelease[]>([]);
     const [selectedBacklogItem, setSelectedBacklogItem] = useState<BacklogRelease | null>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [showSprintBacklogModal, setShowSprintBacklogModal] = useState(false);
+    const [sprintBacklogItems, setSprintBacklogItems] = useState<any[]>([]);
+    const [selectedSprint, setSelectedSprint] = useState<{ project_id: number, sprint_id: number | null } | null>(null);
 
     // Form state
     const [formData, setFormData] = useState<CreateReleaseNoteRequest>({
@@ -33,10 +36,9 @@ const ReleaseNotes: React.FC = () => {
         summary: ''
     });
 
-    // Individual field states for content arrays
-    const [newFeature, setNewFeature] = useState('');
-    const [newBugFix, setNewBugFix] = useState('');
-    const [newImprovement, setNewImprovement] = useState('');
+    // AI generation state
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
 
     useEffect(() => {
         loadProjects();
@@ -99,32 +101,81 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
-    const handleGenerateAI = async () => {
-        if (!formData.project_id || !formData.version) {
-            toast.error('Please select a project and enter a version');
+    const generateAIContent = async (targetFormData: typeof formData) => {
+        if (!targetFormData.project_id || (!targetFormData.start_sprint && !targetFormData.end_sprint)) {
+            toast.error('Please select a project and sprint range');
             return;
         }
 
-        setLoading(true);
+        setIsGeneratingAI(true);
+        toast.info('🤖 AI analyzing completed sprint items...');
+
         try {
             const response = await releaseNotesApi.generateAI({
-                project_id: formData.project_id,
-                version: formData.version,
-                include_tasks: true
+                project_id: targetFormData.project_id,
+                version: targetFormData.version || 'v1.0.0',
+                include_tasks: true,
+                start_sprint: targetFormData.start_sprint,
+                end_sprint: targetFormData.end_sprint
             });
 
-            // Populate form with AI-generated content
+            // Populate form with AI-generated content from completed items
             setFormData(prev => ({
                 ...prev,
                 content: response.content,
-                summary: response.summary
+                summary: response.summary,
+                release_type: response.release_type || prev.release_type
             }));
+            setHasGeneratedContent(true);
 
-            toast.success('Release note content generated!');
+            // Show success message with content summary
+            const totalItems = (response.content.features?.length || 0) +
+                (response.content.bug_fixes?.length || 0) +
+                (response.content.improvements?.length || 0);
+            toast.success(`✨ Generated from completed sprint items: ${response.content.features?.length || 0} features, ${response.content.bug_fixes?.length || 0} fixes, ${response.content.improvements?.length || 0} improvements!`);
         } catch (error) {
-            toast.error('Failed to generate content');
+            console.error('AI generation error:', error);
+            toast.error('Failed to generate content from sprint items. Please check if sprint has completed work.');
         } finally {
-            setLoading(false);
+            setIsGeneratingAI(false);
+        }
+    };
+
+    const handleShowSprintBacklog = async (projectId: number, sprintId: number | null) => {
+        setSelectedSprint({ project_id: projectId, sprint_id: sprintId });
+        setShowSprintBacklogModal(true);
+
+        try {
+            // Get token from auth-storage (consistent with other components)
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken;
+            if (!token) {
+                console.error('No access token found');
+                setSprintBacklogItems([]);
+                return;
+            }
+
+            // Fetch all backlog items for this sprint and project (only completed items)
+            const sprintParam = sprintId ? `?sprint_id=${sprintId}&status=done` : '?status=done';
+            const response = await fetch(`http://localhost:8000/api/v1/backlog/project/${projectId}${sprintParam}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setSprintBacklogItems(Array.isArray(data.data) ? data.data : data.items || []);
+            } else {
+                console.error('Failed to fetch sprint backlog', response.status, response.statusText);
+                if (response.status === 401) {
+                    console.error('Authentication failed - please log in again');
+                }
+                setSprintBacklogItems([]);
+            }
+        } catch (error) {
+            console.error('Error fetching sprint backlog:', error);
+            setSprintBacklogItems([]);
         }
     };
 
@@ -152,15 +203,16 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
-    const handleConvertFromBacklog = (item: BacklogRelease) => {
-        setFormData({
+    const handleConvertFromBacklog = async (item: BacklogRelease) => {
+        // Pre-fill form data from backlog item
+        const initialFormData = {
             project_id: item.project_id,
-            version: item.id.includes('-') ? item.id : '1.0.0', // Default if not a Jira key
-            title: item.summary,
+            version: item.id.includes('-') ? item.id.split('-')[1] || '1.0.0' : '1.0.0',
+            title: `Release for ${item.summary}`,
             release_date: item.end_date ? item.end_date.split(' ')[0] : null,
-            release_type: 'MINOR',
-            start_sprint: null,
-            end_sprint: null,
+            release_type: 'MINOR' as const,
+            start_sprint: item.sprint_id,
+            end_sprint: item.sprint_id,
             content: {
                 features: [],
                 bug_fixes: [],
@@ -169,7 +221,9 @@ const ReleaseNotes: React.FC = () => {
                 known_issues: []
             },
             summary: item.description || ''
-        });
+        };
+
+        setFormData(initialFormData);
         setShowModal(true);
     };
 
@@ -191,33 +245,7 @@ const ReleaseNotes: React.FC = () => {
             },
             summary: ''
         });
-    };
-
-    const addItem = (type: keyof ReleaseNoteContent, value: string) => {
-        if (!value.trim()) return;
-
-        setFormData(prev => ({
-            ...prev,
-            content: {
-                ...prev.content,
-                [type]: [...prev.content[type], value.trim()]
-            }
-        }));
-
-        // Reset input
-        if (type === 'features') setNewFeature('');
-        if (type === 'bug_fixes') setNewBugFix('');
-        if (type === 'improvements') setNewImprovement('');
-    };
-
-    const removeItem = (type: keyof ReleaseNoteContent, index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            content: {
-                ...prev.content,
-                [type]: prev.content[type].filter((_, i) => i !== index)
-            }
-        }));
+        setHasGeneratedContent(false);
     };
 
     return (
@@ -230,12 +258,6 @@ const ReleaseNotes: React.FC = () => {
                     </h1>
                     <p className="text-sm text-gray-600">Manage release notes and backlog releases.</p>
                 </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 transition-colors"
-                >
-                    + Create New Release
-                </button>
             </div>
 
             {/* Premium Controls Row */}
@@ -251,22 +273,20 @@ const ReleaseNotes: React.FC = () => {
                             <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
                         ))}
                     </select>
-
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
-                        className="px-3 py-1.5 bg-white border border-gray-200 rounded focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-sm"
+                        className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-sm"
                     >
-                        <option value="">All Status</option>
+                        <option value="">All Statuses</option>
                         <option value="DRAFT">Draft</option>
                         <option value="PUBLISHED">Published</option>
-                        <option value="ARCHIVED">Archived</option>
                     </select>
                 </div>
             </div>
 
-            {/* Backlog Planning Section */}
-            <div className="mb-6">
+            {/* Planned Releases (Backlog) Section */}
+            <div className="mb-8">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-medium text-gray-800 flex items-center gap-2">
                         <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded flex items-center justify-center text-sm">📅</span>
@@ -274,8 +294,7 @@ const ReleaseNotes: React.FC = () => {
                         <span className="text-sm text-gray-400 ml-2">({backlogReleases.length})</span>
                     </h2>
                 </div>
-
-                <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
@@ -292,7 +311,7 @@ const ReleaseNotes: React.FC = () => {
                             <tbody className="divide-y divide-gray-100">
                                 {backlogReleases.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
+                                        <td colSpan={7} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
                                     </tr>
                                 ) : (
                                     backlogReleases.map(item => (
@@ -330,6 +349,13 @@ const ReleaseNotes: React.FC = () => {
                                             <td className="px-3 py-2 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button
+                                                        onClick={() => handleShowSprintBacklog(item.project_id, item.sprint_id)}
+                                                        className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded hover:bg-gray-200 transition-all whitespace-nowrap font-medium"
+                                                        title="View all backlog items for this sprint"
+                                                    >
+                                                        📋 backlog
+                                                    </button>
+                                                    <button
                                                         onClick={() => {
                                                             setSelectedBacklogItem(item);
                                                             setShowDetailsModal(true);
@@ -341,15 +367,9 @@ const ReleaseNotes: React.FC = () => {
                                                     </button>
                                                     <button
                                                         onClick={() => handleConvertFromBacklog(item)}
-                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 text-xs rounded hover:bg-indigo-600 hover:text-white transition-all whitespace-nowrap"
+                                                        className="px-2 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs rounded hover:from-purple-700 hover:to-blue-700 transition-all whitespace-nowrap font-medium"
                                                     >
                                                         PROCESS
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleConvertFromBacklog(item)}
-                                                        className="px-2 py-1 bg-gray-50 text-gray-600 text-xs rounded hover:bg-gray-200 transition-all whitespace-nowrap"
-                                                    >
-                                                        CREATE DRAFT
                                                     </button>
                                                 </div>
                                             </td>
@@ -433,20 +453,28 @@ const ReleaseNotes: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-3 py-2 text-right">
-                                            <div className="flex justify-end gap-2 text-xs">
+                                            <div className="flex justify-end gap-2 items-center">
+                                                <button
+                                                    onClick={() => toast.info(`Viewing v${note.version}`)}
+                                                    className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                                                    title="View Details"
+                                                >
+                                                    👁️
+                                                </button>
                                                 {note.status === 'DRAFT' && (
                                                     <button
                                                         onClick={() => handlePublish(note.id)}
-                                                        className="text-indigo-600 hover:text-indigo-800"
+                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs"
                                                     >
                                                         PUBLISH
                                                     </button>
                                                 )}
                                                 <button
                                                     onClick={() => handleDelete(note.id)}
-                                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                                    className="p-1 text-gray-400 hover:text-red-500 transition-colors text-lg"
+                                                    title="Delete"
                                                 >
-                                                    DELETE
+                                                    &times;
                                                 </button>
                                             </div>
                                         </td>
@@ -460,8 +488,8 @@ const ReleaseNotes: React.FC = () => {
 
             {/* Create Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-white/30 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300" onClick={() => setShowModal(false)}>
-                    <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-white/30 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         {/* Modal Header */}
                         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-20">
                             <h2 className="text-xl font-bold text-gray-900">Create Release Note</h2>
@@ -469,8 +497,21 @@ const ReleaseNotes: React.FC = () => {
                         </div>
                         {/* Modal Body */}
                         <div className="p-6 space-y-6">
-                            {/* Form fields... */}
-                            {/* Project & Version */}
+                            {/* Summary / Highlights First */}
+                            <div className="bg-amber-50/30 p-4 rounded-xl border border-amber-100 shadow-sm">
+                                <label className="block text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                                    <span>📝</span> Release Summary / Highlights
+                                </label>
+                                <textarea
+                                    placeholder="Provide a brief overview or highlights of this release..."
+                                    value={formData.summary || ''}
+                                    onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                                    className="w-full px-4 py-3 border border-amber-100 bg-white rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none transition-all placeholder:text-gray-400"
+                                    rows={4}
+                                />
+                                <p className="mt-2 text-[10px] text-gray-500 italic">This summary provides an executive overview for users and stakeholders.</p>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Project *</label>
@@ -498,7 +539,6 @@ const ReleaseNotes: React.FC = () => {
                                     />
                                 </div>
                             </div>
-                            {/* Title & Type */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Title *</label>
                                 <input
@@ -556,55 +596,120 @@ const ReleaseNotes: React.FC = () => {
                                     />
                                 </div>
                             </div>
-                            {/* AI Generate Button */}
-                            <button
-                                onClick={handleGenerateAI}
-                                disabled={loading || !formData.project_id || !formData.version}
-                                className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 font-medium"
-                            >
-                                ✨ Generate with AI
-                            </button>
-                            {/* Content sections (Features, Bug Fixes, etc.) */}
-                            <div className="space-y-4">
-                                {/* Features */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Features</label>
-                                    <div className="flex gap-2 mb-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Add a new feature"
-                                            value={newFeature}
-                                            onChange={(e) => setNewFeature(e.target.value)}
-                                            onKeyPress={(e) => e.key === 'Enter' && addItem('features', newFeature)}
-                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm"
-                                        />
-                                        <button onClick={() => addItem('features', newFeature)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">Add</button>
-                                    </div>
-                                    <ul className="space-y-1">
-                                        {formData.content.features.map((item, i) => (
-                                            <li key={i} className="flex justify-between items-center bg-blue-50 px-3 py-2 rounded text-sm">
-                                                <span>{item}</span>
-                                                <button onClick={() => removeItem('features', i)} className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                            </li>
-                                        ))}
-                                    </ul>
+
+                            {/* AI Generation Section */}
+                            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 border border-purple-200">
+                                <div className="text-center mb-4">
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-2">🤖 AI-Generated Content</h3>
+                                    <p className="text-gray-600 text-sm mb-4">
+                                        Generate release notes from completed sprint items automatically
+                                    </p>
+
+                                    {!hasGeneratedContent ? (
+                                        <button
+                                            onClick={() => generateAIContent(formData)}
+                                            disabled={isGeneratingAI || !formData.project_id}
+                                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                                        >
+                                            {isGeneratingAI ? (
+                                                <span className="flex items-center gap-2">
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                                    Analyzing Sprint Items...
+                                                </span>
+                                            ) : (
+                                                '✨ Generate from Completed Sprint Items'
+                                            )}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => generateAIContent(formData)}
+                                            disabled={isGeneratingAI}
+                                            className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors"
+                                        >
+                                            🔄 Regenerate Content
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                            {/* Summary */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Summary</label>
-                                <textarea
-                                    placeholder="Brief overview of this release..."
-                                    value={formData.summary || ''}
-                                    onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm"
-                                    rows={3}
-                                />
-                            </div>
+
+                            {/* Generated Content Display */}
+                            {hasGeneratedContent && (
+                                <div className="space-y-6">
+                                    {/* New Features */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">✨ New Features</label>
+                                        {formData.content.features.length > 0 ? (
+                                            <div className="bg-blue-50 rounded-lg p-4">
+                                                <ul className="space-y-2">
+                                                    {formData.content.features.map((item, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-blue-800">
+                                                            <span className="text-blue-500 mt-0.5">•</span>
+                                                            <span className="text-sm">{item}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
+                                                No new features found in completed sprint items
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Bug Fixes */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">🐛 Bug Fixes</label>
+                                        {formData.content.bug_fixes.length > 0 ? (
+                                            <div className="bg-green-50 rounded-lg p-4">
+                                                <ul className="space-y-2">
+                                                    {formData.content.bug_fixes.map((item, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-green-800">
+                                                            <span className="text-green-500 mt-0.5">•</span>
+                                                            <span className="text-sm">{item}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
+                                                No bug fixes found in completed sprint items
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Improvements */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">⚡ Improvements</label>
+                                        {formData.content.improvements.length > 0 ? (
+                                            <div className="bg-purple-50 rounded-lg p-4">
+                                                <ul className="space-y-2">
+                                                    {formData.content.improvements.map((item, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-purple-800">
+                                                            <span className="text-purple-500 mt-0.5">•</span>
+                                                            <span className="text-sm">{item}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
+                                                No improvements found in completed sprint items
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 z-10">
                             <button onClick={() => setShowModal(false)} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
-                            <button onClick={handleCreate} disabled={loading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{loading ? 'Creating...' : 'Create Draft'}</button>
+                            <button
+                                onClick={handleCreate}
+                                disabled={loading || !hasGeneratedContent}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={!hasGeneratedContent ? 'Generate AI content first' : ''}
+                            >
+                                {loading ? 'Creating...' : 'Create Release Note'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -668,6 +773,86 @@ const ReleaseNotes: React.FC = () => {
                                 className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100"
                             >
                                 CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Sprint Backlog Modal */}
+            {showSprintBacklogModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-y-auto w-full">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-800">Completed Sprint Items</h3>
+                                <p className="text-gray-600 text-sm">
+                                    Project: {selectedSprint?.project_id} | Sprint: {selectedSprint?.sprint_id || 'General'} | Status: Done
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowSprintBacklogModal(false)}
+                                className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {sprintBacklogItems.length > 0 ? (
+                            <div className="space-y-3">
+                                {sprintBacklogItems.map((item, index) => (
+                                    <div
+                                        key={index}
+                                        className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors bg-gray-50"
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-gray-800 mb-2">
+                                                    {item.summary || item.title || item.task_name || `Backlog Item #${index + 1}`}
+                                                </h4>
+                                                <p className="text-gray-600 text-sm mb-2">
+                                                    {item.description || item.task_description || 'No description available'}
+                                                </p>
+                                                <div className="flex gap-4 text-xs text-gray-500">
+                                                    <span>Type: {item.issue_type || item.type || item.task_type || 'Unknown'}</span>
+                                                    <span>Priority: {item.priority || 'Medium'}</span>
+                                                    {item.status && <span>Status: {item.status}</span>}
+                                                    {(item.jira_issue_key || item.issue_key) && (
+                                                        <span className="text-blue-600">Key: {item.jira_issue_key || item.issue_key}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="ml-4 flex gap-2">
+                                                {item.id && (
+                                                    <button
+                                                        onClick={() => {
+                                                            console.log('Converting item to release note:', item);
+                                                            // You can add conversion logic here if needed
+                                                        }}
+                                                        className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded hover:bg-blue-200 transition-colors"
+                                                        title="Convert to Release Note"
+                                                    >
+                                                        Convert
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <div className="text-gray-400 text-4xl mb-4">✅</div>
+                                <p className="text-gray-600">No completed backlog items found for this sprint</p>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
+                            <button
+                                onClick={() => setShowSprintBacklogModal(false)}
+                                className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-100"
+                            >
+                                Close
                             </button>
                         </div>
                     </div>
