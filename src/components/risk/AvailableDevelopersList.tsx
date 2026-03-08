@@ -15,13 +15,14 @@ interface AvailableDevelopersListProps {
     developers: AvailableDeveloper[];
     sprintName?: string;
     onClose: () => void;
+    onBack?: () => void;
 }
 
-export default function AvailableDevelopersList({ developers, sprintName, onClose }: AvailableDevelopersListProps) {
+export default function AvailableDevelopersList({ developers, sprintName, onClose, onBack }: AvailableDevelopersListProps) {
     if (developers.length === 0) {
         return (
-            <div className="fixed inset-0 z-[60] overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl border-2 border-indigo-200 max-w-md w-full p-6 animate-fade-in">
                     <div className="text-center">
                         <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -29,27 +30,59 @@ export default function AvailableDevelopersList({ developers, sprintName, onClos
                         <p className="text-lg font-semibold text-gray-900">No Available Developers</p>
                         <p className="text-sm text-gray-600 mt-2">All team members are optimally utilized</p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="mt-6 w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition"
-                    >
-                        Close
-                    </button>
+                    <div className="mt-6 flex gap-3">
+                        {onBack && (
+                            <button
+                                onClick={onBack}
+                                className="flex-1 flex items-center justify-center gap-2 bg-white border-2 border-indigo-300 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-50 transition font-medium"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                                Back to Recommendations
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className={`${onBack ? '' : 'w-full'} flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-indigo-700 hover:to-blue-700 transition shadow-md font-medium`}
+                        >
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border-2 border-indigo-200 max-w-2xl w-full max-h-[90vh] flex flex-col animate-fade-in">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 flex items-center justify-between rounded-t-lg">
-                    <div>
-                        <h3 className="text-xl font-bold text-white">Available Developers</h3>
-                        {sprintName && (
-                            <p className="text-sm text-blue-100 mt-1">{sprintName} • {developers.length} developer{developers.length > 1 ? 's' : ''} with low workload</p>
+                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5 flex items-center justify-between rounded-t-2xl">
+                    <div className="flex items-center gap-3">
+                        {/* Back Button */}
+                        {onBack && (
+                            <button
+                                onClick={onBack}
+                                className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-all mr-1"
+                                title="Back to Recommendations"
+                            >
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
                         )}
+                        <div className="bg-white bg-opacity-20 p-2.5 rounded-lg">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white">Available Developers</h3>
+                            {sprintName && (
+                                <p className="text-sm text-indigo-100 mt-0.5">{sprintName} • {developers.length} developer{developers.length > 1 ? 's' : ''} with low workload</p>
+                            )}
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
@@ -62,17 +95,17 @@ export default function AvailableDevelopersList({ developers, sprintName, onClos
                 </div>
 
                 {/* Developer List */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-indigo-50/50 to-white">
                     <div className="space-y-3">
                         {developers.map((dev, index) => (
                             <div
                                 key={index}
-                                className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition"
+                                className="flex items-center justify-between p-4 bg-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-md transition-all"
                             >
                                 {/* Developer Info */}
                                 <div className="flex items-center gap-3 flex-1">
                                     {/* Avatar */}
-                                    <div className="bg-gradient-to-br from-blue-500 to-purple-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-md">
+                                    <div className="bg-gradient-to-br from-indigo-500 to-blue-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-md">
                                         {dev.name.charAt(0).toUpperCase()}
                                     </div>
 
@@ -116,14 +149,29 @@ export default function AvailableDevelopersList({ developers, sprintName, onClos
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
+                <div className="border-t border-indigo-200 px-6 py-4 bg-indigo-50/50 rounded-b-2xl">
                     <div className="flex items-center justify-between">
-                        <div className="text-xs text-gray-500">
-                            💡 Consider redistributing tasks to balance team capacity
+                        <div className="flex items-center gap-3">
+                            {onBack && (
+                                <button
+                                    onClick={onBack}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all font-medium text-sm"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                    </svg>
+                                    Back to Recommendations
+                                </button>
+                            )}
+                            {!onBack && (
+                                <div className="text-xs text-gray-500">
+                                    💡 Consider redistributing tasks to balance team capacity
+                                </div>
+                            )}
                         </div>
                         <button
                             onClick={onClose}
-                            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition shadow-md"
+                            className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:from-indigo-700 hover:to-blue-700 transition shadow-md"
                         >
                             Close
                         </button>
