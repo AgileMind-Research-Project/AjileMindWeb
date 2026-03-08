@@ -503,6 +503,18 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
                 }`}>
                   {report.status}
                 </span>
+                {report.template_id && (
+                  <>
+                    <span>•</span>
+                    <button
+                      onClick={() => router.push(`/reports/templates/${report.template_id}`)}
+                      className="text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      View Template
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

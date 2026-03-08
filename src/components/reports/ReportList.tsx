@@ -168,12 +168,23 @@ export default function ReportList() {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               AI Reports
             </h1>
-            <button
-              onClick={() => router.push("/transcripts")}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg"
-            >
-              View Transcripts
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push("/reports/templates")}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+                Report Templates
+              </button>
+              <button
+                onClick={() => router.push("/transcripts")}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg"
+              >
+                View Transcripts
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
