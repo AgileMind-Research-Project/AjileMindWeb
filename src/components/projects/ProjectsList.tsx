@@ -102,7 +102,7 @@ export default function ProjectsList({ onCreateNew, onEdit, refreshTrigger }: Pr
       }
 
       const response = await fetch(
-        `${API_CONFIG.baseURL}/api/v1/projects/?page=${page}&limit=${limit}`,
+        `${API_CONFIG.baseURL}/api/v1/projects`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
