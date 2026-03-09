@@ -912,8 +912,8 @@ const ReleaseNotes: React.FC = () => {
 
             {/* Sprint Backlog Modal */}
             {showSprintBacklogModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-y-auto w-full">
+                <div className="fixed inset-0 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 z-50" onClick={() => setShowSprintBacklogModal(false)}>
+                    <div className="bg-white rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-y-auto w-full shadow-2xl border border-gray-100" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-800">Completed Sprint Items</h3>
