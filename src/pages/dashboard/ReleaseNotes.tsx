@@ -412,12 +412,6 @@ const ReleaseNotes: React.FC = () => {
                         Official Release Notes
                         <span className="text-sm text-gray-400 ml-2">({releaseNotes.length})</span>
                     </h2>
-                    <button
-                        onClick={() => { resetForm(); setShowModal(true); }}
-                        className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-sm"
-                    >
-                        <span>+</span> Create Release Note
-                    </button>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
                     <table className="w-full">
