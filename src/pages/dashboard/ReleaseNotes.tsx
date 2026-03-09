@@ -17,7 +17,8 @@ import {
     CheckCircle2,
     Clock,
     User,
-    ArrowRight
+    ArrowRight,
+    LifeBuoy
 } from 'lucide-react';
 
 const ReleaseNotes: React.FC = () => {
@@ -277,21 +278,71 @@ const ReleaseNotes: React.FC = () => {
     const downloadAsPDF = async () => {
         if (!pdfContentRef.current || !selectedOfficialNote) return;
 
-        const canvas = await html2canvas(pdfContentRef.current, {
-            scale: 2, // Higher quality
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff'
-        });
+        const toastId = toast.loading('Preparing professional A4 release notes...');
 
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        try {
+            const canvas = await html2canvas(pdfContentRef.current, {
+                scale: 2, // Standard high-quality scale
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                onclone: (clonedDoc) => {
+                    const elements = clonedDoc.getElementsByTagName('*');
+                    for (let i = 0; i < elements.length; i++) {
+                        const el = elements[i] as HTMLElement;
+                        const computedStyle = window.getComputedStyle(el);
 
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`${selectedOfficialNote.title.replace(/\s+/g, '_')}_v${selectedOfficialNote.version}.pdf`);
-        toast.success('PDF Downloaded successfully');
+                        // Sanitization for modern color spaces
+                        if (computedStyle.color && (computedStyle.color.includes('oklch') || computedStyle.color.includes('oklab'))) {
+                            el.style.color = '#0f172a';
+                        }
+                        if (computedStyle.backgroundColor && (computedStyle.backgroundColor.includes('oklch') || computedStyle.backgroundColor.includes('oklab'))) {
+                            el.style.backgroundColor = 'transparent';
+                        }
+                        if (computedStyle.borderColor && (computedStyle.borderColor.includes('oklch') || computedStyle.borderColor.includes('oklab'))) {
+                            el.style.borderColor = '#e2e8f0';
+                        }
+                        if (computedStyle.backdropFilter && computedStyle.backdropFilter !== 'none') {
+                            el.style.backdropFilter = 'none';
+                        }
+                        el.style.fontFeatureSettings = 'normal';
+                    }
+                }
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pageWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            // Page 1
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+
+            // Page 2 and beyond
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+            }
+
+            const projectName = projects.find(p => p.project_id === selectedOfficialNote.project_id)?.project_name || 'Project';
+            const safeFileName = `${projectName}_v${selectedOfficialNote.version}_ReleaseNote`.replace(/[^a-z0-9]/gi, '_');
+            pdf.save(`${safeFileName}.pdf`);
+            toast.dismiss(toastId);
+            toast.success('Professional A4 PDF format generated');
+        } catch (error) {
+            console.error('PDF Export failed:', error);
+            toast.dismiss(toastId);
+            toast.error('Could not generate A4 PDF format');
+        }
     };
 
     const resetForm = () => {
@@ -366,13 +417,13 @@ const ReleaseNotes: React.FC = () => {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50 text-left border-b border-gray-200">
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Project</th>
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Key</th>
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase text-center">Sprint</th>
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Summary</th>
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Target Date</th>
-                                    <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Project</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Key</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500 text-center">Sprint</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Summary</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Target Date</th>
+                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Status</th>
+                                    <th className="px-3 py-2 text-right text-xs font-bold text-gray-500">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -436,7 +487,7 @@ const ReleaseNotes: React.FC = () => {
                                                         onClick={() => handleConvertFromBacklog(item)}
                                                         className="px-2 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs rounded hover:from-purple-700 hover:to-blue-700 transition-all whitespace-nowrap font-medium"
                                                     >
-                                                        PROCESS
+                                                        Process
                                                     </button>
                                                 </div>
                                             </td>
@@ -462,12 +513,12 @@ const ReleaseNotes: React.FC = () => {
                     <table className="w-full">
                         <thead>
                             <tr className="bg-gray-50">
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Release Info</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Coverage</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th className="px-3 py-2 text-left text-xs font-bold text-gray-500">Version</th>
+                                <th className="px-3 py-2 text-left text-xs font-bold text-gray-500">Release Info</th>
+                                <th className="px-3 py-2 text-left text-xs font-bold text-gray-500">Type</th>
+                                <th className="px-3 py-2 text-left text-xs font-bold text-gray-500">Coverage</th>
+                                <th className="px-3 py-2 text-left text-xs font-bold text-gray-500">Status</th>
+                                <th className="px-3 py-2 text-right text-xs font-bold text-gray-500">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -533,7 +584,7 @@ const ReleaseNotes: React.FC = () => {
                                                         onClick={() => handlePublish(note.id)}
                                                         className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs"
                                                     >
-                                                        PUBLISH
+                                                        Publish
                                                     </button>
                                                 )}
                                                 <button
@@ -809,30 +860,30 @@ const ReleaseNotes: React.FC = () => {
                         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Project</p>
+                                    <p className="text-[10px] font-bold text-gray-400">Project</p>
                                     <p className="text-sm font-medium text-gray-800">
                                         {projects.find(p => p.project_id === selectedBacklogItem.project_id)?.project_name || `Project ${selectedBacklogItem.project_id}`}
                                     </p>
                                 </div>
                                 <div className="space-y-1 text-right">
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sprint</p>
+                                    <p className="text-[10px] font-bold text-gray-400">Sprint</p>
                                     <p className="text-sm font-medium text-indigo-600">S{selectedBacklogItem.sprint_id || 'N/A'}</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Target Date</p>
+                                    <p className="text-[10px] font-bold text-gray-400">Target Date</p>
                                     <p className="text-sm font-medium text-gray-800">
                                         {selectedBacklogItem.end_date ? new Date(selectedBacklogItem.end_date).toLocaleDateString() : 'TBD'}
                                     </p>
                                 </div>
                                 <div className="space-y-1 text-right">
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</p>
+                                    <p className="text-[10px] font-bold text-gray-400">Status</p>
                                     <span className={`text-xs px-2 py-0.5 rounded-full ${selectedBacklogItem.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                         {selectedBacklogItem.status}
                                     </span>
                                 </div>
                             </div>
                             <div className="pt-4 border-t border-gray-100">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Description</p>
+                                <p className="text-[10px] font-bold text-gray-400 mb-2">Description</p>
                                 <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
                                     {selectedBacklogItem.description || "No detailed description provided for this release item."}
                                 </div>
@@ -939,236 +990,275 @@ const ReleaseNotes: React.FC = () => {
                 </div>
             )}
 
-            {/* View Official Release Note Modal - Re-designed for Professional Look */}
+            {/* Professional Enterprise Documentation Modal */}
             {showOfficialNoteModal && selectedOfficialNote && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md transition-all duration-300">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-300">
-                        {/* Elegant Minimal Header */}
-                        <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner">
-                                    <FileText size={20} />
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[#0f172a]/70 backdrop-blur-xl transition-all duration-500">
+                    <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden border border-[#1e293b] animate-in fade-in zoom-in duration-300">
+                        {/* Clinical Enterprise Header */}
+                        <div className="px-10 py-6 border-b border-[#f1f5f9] flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-20">
+                            <div className="flex items-center gap-5">
+                                <div className="w-12 h-12 bg-[#0f172a] text-white rounded-lg flex items-center justify-center shadow-lg transform -rotate-1">
+                                    <FileText size={24} strokeWidth={1.5} />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900 leading-none">Release Documentation</h3>
-                                    <div className="flex items-center gap-2 mt-1.5">
-                                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                            <ShieldAlert size={10} className="text-indigo-400" /> Authorized Copy
+                                    <h3 className="text-xl font-bold text-[#0f172a] tracking-tight leading-none">External Release Report</h3>
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[#64748b] tracking-tight">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></div> Active Production
                                         </span>
-                                        <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v{selectedOfficialNote.version}</span>
+                                        <span className="w-1 h-1 rounded-full bg-[#cbd5e1]"></span>
+                                        <span className="text-[10px] font-semibold text-[#64748b] tracking-tight">Reference ID: AM-{selectedOfficialNote.id.toString().padStart(5, '0')}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-4">
                                 <button
                                     onClick={downloadAsPDF}
-                                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 group"
+                                    className="flex items-center gap-2.5 px-6 py-2.5 bg-[#0f172a] text-white text-[11px] font-bold rounded-lg hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 group tracking-tight"
                                 >
-                                    <Download size={14} className="group-hover:-translate-y-0.5 transition-transform" />
-                                    EXPORT AS PDF
+                                    <Download size={15} />
+                                    Generate PDF
                                 </button>
                                 <button
                                     onClick={() => setShowOfficialNoteModal(false)}
-                                    className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+                                    className="w-10 h-10 flex items-center justify-center text-[#94a3b8] hover:text-[#0f172a] hover:bg-[#f1f5f9] rounded-full transition-all"
                                 >
-                                    <X size={20} />
+                                    <X size={22} />
                                 </button>
                             </div>
                         </div>
 
                         {/* Professional Document Body */}
-                        <div className="flex-1 overflow-y-auto p-0" style={{ backgroundColor: 'rgba(241, 245, 249, 0.3)' }}>
-                            <div className="max-w-4xl mx-auto my-10 bg-white shadow-xl border border-slate-100 rounded-sm" ref={pdfContentRef} style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
-                                {/* Document Header Panel */}
-                                <div className="p-12 border-b" style={{ borderBottomColor: '#f1f5f9' }}>
-                                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
+                        <div className="flex-1 overflow-y-auto p-0 bg-[#f8fafc]">
+                            <div className="max-w-[850px] mx-auto my-8 bg-[#ffffff] border border-[#e2e8f0] rounded-sm overflow-hidden" ref={pdfContentRef} style={{ backgroundColor: '#ffffff', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+                                {/* Corporate Letterhead / Header */}
+                                <div className="p-10 pb-0">
+                                    <div className="flex flex-col md:flex-row justify-between items-start gap-8 mb-8">
                                         <div className="flex-1">
-                                            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded text-[10px] font-black tracking-widest uppercase mb-6 border" style={{ backgroundColor: '#eef2ff', color: '#4338ca', borderColor: 'rgba(199, 210, 254, 0.5)' }}>
-                                                <Zap size={10} /> Official Release
+                                            <div className="flex items-center gap-2 mb-6">
+                                                <div className="w-6 h-0.5 bg-[#1e293b]"></div>
+                                                <span className="text-[10px] font-bold text-[#1e293b] tracking-tight">RELEASE DOCUMENTATION</span>
                                             </div>
-                                            <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-4" style={{ color: '#0f172a' }}>
+                                            <h1 className="text-4xl font-extrabold text-[#0f172a] tracking-tight leading-tight mb-5">
                                                 {selectedOfficialNote.title}
                                             </h1>
-                                            {selectedOfficialNote.summary && (
-                                                <p className="text-lg leading-relaxed max-w-2xl font-medium" style={{ color: '#64748b' }}>
-                                                    {selectedOfficialNote.summary}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Metadata Card */}
-                                        <div className="w-full md:w-64 rounded-2xl p-6 border shrink-0" style={{ backgroundColor: '#f8fafc', borderColor: '#f1f5f9' }}>
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Project</span>
-                                                    <span className="text-sm font-bold flex items-center gap-2" style={{ color: '#0f172a' }}>
-                                                        <Layers size={14} style={{ color: '#6366f1' }} />
-                                                        {projects.find(p => p.project_id === selectedOfficialNote.project_id)?.project_name || 'Project ' + selectedOfficialNote.project_id}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-0 border border-[#e2e8f0] rounded-lg overflow-hidden bg-[#f8fafc]">
+                                                <div className="flex flex-col gap-1 p-5 border-r border-[#e2e8f0]">
+                                                    <span className="text-[10px] font-bold text-[#64748b]">Product Name</span>
+                                                    <span className="text-sm font-bold text-[#0f172a]">
+                                                        {projects.find(p => p.project_id === selectedOfficialNote.project_id)?.project_name || 'AgileMind Project'}
                                                     </span>
                                                 </div>
-                                                <div className="flex gap-4">
-                                                    <div className="flex-1">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Version</span>
-                                                        <span className="text-lg font-black block" style={{ color: '#4f46e5' }}>v{selectedOfficialNote.version}</span>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Type</span>
-                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border" style={
-                                                            selectedOfficialNote.release_type === 'MAJOR' ? { backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fee2e2' } :
-                                                                selectedOfficialNote.release_type === 'MINOR' ? { backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#e0e7ff' } :
-                                                                    { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#d1fae5' }
-                                                        }>
-                                                            {selectedOfficialNote.release_type}
-                                                        </span>
-                                                    </div>
+                                                <div className="flex flex-col gap-1 p-5 border-r border-[#e2e8f0]">
+                                                    <span className="text-[10px] font-bold text-[#64748b]">Version</span>
+                                                    <span className="text-sm font-bold text-[#0f172a]">v{selectedOfficialNote.version}</span>
                                                 </div>
-                                                <div>
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Release Date</span>
-                                                    <span className="text-sm font-bold flex items-center gap-2" style={{ color: '#0f172a' }}>
-                                                        <Calendar size={14} style={{ color: '#6366f1' }} />
+                                                <div className="flex flex-col gap-1 p-5 border-r border-[#e2e8f0]">
+                                                    <span className="text-[10px] font-bold text-[#64748b]">Release Date</span>
+                                                    <span className="text-sm font-bold text-[#0f172a]">
                                                         {selectedOfficialNote.release_date || new Date(selectedOfficialNote.created_at).toLocaleDateString()}
                                                     </span>
                                                 </div>
+                                                <div className="flex flex-col gap-1 p-5">
+                                                    <span className="text-[10px] font-bold text-[#64748b]">Release Type</span>
+                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded inline-block w-fit border ${selectedOfficialNote.release_type === 'MAJOR' ? 'bg-[#fef2f2] text-[#991b1b] border-[#fee2e2]' :
+                                                        selectedOfficialNote.release_type === 'MINOR' ? 'bg-[#eff6ff] text-[#1e40af] border-[#dbeafe]' :
+                                                            'bg-[#f0fdf4] text-[#166534] border-[#dcfce7]'
+                                                        }`}>
+                                                        {selectedOfficialNote.release_type.charAt(0) + selectedOfficialNote.release_type.slice(1).toLowerCase()} Update
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Modern Sidebar Metadata */}
+                                        <div className="w-full md:w-[200px] shrink-0 border-l border-[#f1f5f9] pl-8 hidden md:block">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <span className="text-[10px] font-bold text-[#94a3b8] block mb-1.5">Project Entity</span>
+                                                    <p className="text-sm font-bold text-[#0f172a] leading-tight">
+                                                        {projects.find(p => p.project_id === selectedOfficialNote.project_id)?.project_name || 'Project Entity ' + selectedOfficialNote.project_id}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] font-bold text-[#94a3b8] block mb-1.5">Publication Date</span>
+                                                    <p className="text-sm font-bold text-[#0f172a]">
+                                                        {selectedOfficialNote.release_date || new Date(selectedOfficialNote.created_at).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] font-bold text-[#94a3b8] block mb-1.5">Authenticated By</span>
+                                                    <p className="text-[11px] font-medium text-[#64748b] leading-tight">
+                                                        AgileMind Intelligence Protocol
+                                                    </p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Quick Statistics Bar - Professional style */}
-                                    <div className="grid grid-cols-4 gap-4 py-8 border-y" style={{ borderTopColor: '#f8fafc', borderBottomColor: '#f8fafc' }}>
-                                        {[
-                                            { label: 'Features', value: selectedOfficialNote.content.features?.length || 0, color: '#4f46e5', bg: '#eef2ff', icon: Sparkles },
-                                            { label: 'Fixes', value: selectedOfficialNote.content.bug_fixes?.length || 0, color: '#d97706', bg: '#fffbeb', icon: Bug },
-                                            { label: 'Optimized', value: selectedOfficialNote.content.improvements?.length || 0, color: '#059669', bg: '#ecfdf5', icon: Zap },
-                                            { label: 'Breaking', value: selectedOfficialNote.content.breaking_changes?.length || 0, color: '#e11d48', bg: '#fff1f2', icon: ShieldAlert },
-                                        ].map((stat, i) => (
-                                            <div key={i} className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg, color: stat.color }}>
-                                                    <stat.icon size={14} />
-                                                </div>
-                                                <div>
-                                                    <div className="text-lg font-black leading-none" style={{ color: '#0f172a' }}>{stat.value}</div>
-                                                    <div className="text-[10px] font-bold uppercase mt-0.5" style={{ color: '#94a3b8' }}>{stat.label}</div>
-                                                </div>
+                                    {selectedOfficialNote.summary && (
+                                        <div className="mb-8">
+                                            <span className="text-[10px] font-bold text-[#64748b] block mb-2">02. EXECUTIVE SUMMARY</span>
+                                            <div className="relative">
+                                                <div className="absolute top-0 left-0 w-0.5 h-full bg-[#1e293b]"></div>
+                                                <p className="pl-6 text-lg font-medium text-[#475569] leading-6 max-w-2xl italic">
+                                                    "{selectedOfficialNote.summary}"
+                                                </p>
                                             </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Main Detailed Content */}
-                                <div className="p-12 space-y-16">
+                                {/* Deep Document Content */}
+                                <div className="px-10 pb-12 space-y-8">
                                     {/* Features Section */}
                                     {selectedOfficialNote.content.features?.length > 0 && (
                                         <section>
-                                            <div className="flex items-center gap-4 mb-8">
-                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
-                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#4f46e5' }}></span>
-                                                    Principal Features
-                                                </h3>
+                                            <div className="flex items-baseline justify-between mb-4 border-b border-[#f1f5f9] pb-1.5">
+                                                <h3 className="text-[10px] font-bold text-[#64748b]">03. NEW FEATURES</h3>
+                                                <span className="text-[10px] font-medium text-[#94a3b8]">{selectedOfficialNote.content.features.length} items</span>
                                             </div>
-                                            <div className="grid grid-cols-1 gap-4">
+                                            <div className="space-y-6">
                                                 {selectedOfficialNote.content.features.map((item, idx) => (
-                                                    <div key={idx} className="group p-5 rounded-2xl bg-white border hover:shadow-md transition-all flex items-start gap-4" style={{ borderColor: '#f1f5f9' }}>
-                                                        <div className="mt-1 w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]" style={{ backgroundColor: '#eef2ff', color: '#4f46e5' }}>
-                                                            {idx + 1}
+                                                    <div key={idx} className="flex gap-6 items-start group">
+                                                        <span className="text-xs font-black text-[#cbd5e1] w-4 mt-1">{(idx + 1).toString().padStart(2, '0')}</span>
+                                                        <div className="space-y-1">
+                                                            <p className="text-[15px] font-semibold text-[#0f172a] leading-relaxed">{item}</p>
                                                         </div>
-                                                        <p className="font-medium leading-relaxed" style={{ color: '#334155' }}>{item}</p>
                                                     </div>
                                                 ))}
                                             </div>
                                         </section>
                                     )}
 
-                                    {/* Improvements & Optimizations Section */}
+                                    {/* Operational Improvements */}
                                     {selectedOfficialNote.content.improvements?.length > 0 && (
                                         <section>
-                                            <div className="flex items-center gap-4 mb-8">
-                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
-                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#10b981' }}></span>
-                                                    System Optimizations
-                                                </h3>
+                                            <div className="flex items-baseline justify-between mb-4 border-b border-[#f1f5f9] pb-1.5">
+                                                <h3 className="text-[10px] font-bold text-[#64748b]">04. ENHANCEMENTS / IMPROVEMENTS</h3>
+                                                <span className="text-[10px] font-medium text-[#94a3b8]">{selectedOfficialNote.content.improvements.length} items</span>
                                             </div>
-                                            <div className="space-y-3">
+                                            <div className="grid grid-cols-1 gap-5">
                                                 {selectedOfficialNote.content.improvements.map((item, idx) => (
-                                                    <div key={idx} className="flex items-start gap-4 p-4 rounded-xl transition-colors hover:bg-[#f8fafc]">
-                                                        <CheckCircle2 size={18} className="mt-0.5 shrink-0" style={{ color: '#10b981' }} />
-                                                        <p className="font-medium leading-relaxed" style={{ color: '#475569' }}>{item}</p>
+                                                    <div key={idx} className="flex items-center gap-5 p-5 bg-[#f8fafc] rounded border border-[#f1f5f9]">
+                                                        <div className="w-5 h-5 bg-[#ffffff] border border-[#e2e8f0] rounded flex items-center justify-center text-[#10b981]" style={{ boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                                                            <CheckCircle2 size={12} strokeWidth={3} />
+                                                        </div>
+                                                        <p className="text-[14px] font-medium text-[#475569]">{item}</p>
                                                     </div>
                                                 ))}
                                             </div>
                                         </section>
                                     )}
 
-                                    {/* Maintenance & Bug Fixes Section */}
+                                    {/* Maintenance Logs (Bug Fixes) */}
                                     {selectedOfficialNote.content.bug_fixes?.length > 0 && (
                                         <section>
-                                            <div className="flex items-center gap-4 mb-8">
-                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
-                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#f59e0b' }}></span>
-                                                    Security & Maintenance
-                                                </h3>
+                                            <div className="flex items-baseline justify-between mb-4 border-b border-[#f1f5f9] pb-1.5">
+                                                <h3 className="text-[10px] font-bold text-[#64748b]">05. FIXED BUGS</h3>
+                                                <span className="text-[10px] font-medium text-[#94a3b8]">{selectedOfficialNote.content.bug_fixes.length} items</span>
                                             </div>
-                                            <div className="rounded-3xl p-8 border" style={{ backgroundColor: 'rgba(248, 250, 252, 0.5)', borderColor: '#f1f5f9' }}>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-                                                    {selectedOfficialNote.content.bug_fixes.map((item, idx) => (
-                                                        <div key={idx} className="flex items-start gap-3">
-                                                            <div className="mt-2 w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: '#fbbf24' }}></div>
-                                                            <p className="text-sm font-medium leading-relaxed" style={{ color: '#475569' }}>{item}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </section>
-                                    )}
-
-                                    {/* Essential Notifications / Breaking Changes */}
-                                    {selectedOfficialNote.content.breaking_changes?.length > 0 && (
-                                        <section className="rounded-3xl p-8 border" style={{ backgroundColor: 'rgba(255, 241, 242, 0.5)', borderColor: 'rgba(255, 228, 230, 0.5)' }}>
-                                            <div className="flex items-center gap-3 mb-6" style={{ color: '#be123c' }}>
-                                                <ShieldAlert size={20} />
-                                                <h3 className="text-sm font-black uppercase tracking-[0.2em]">Mandatory Transitions</h3>
-                                            </div>
-                                            <div className="space-y-4">
-                                                {selectedOfficialNote.content.breaking_changes.map((item, idx) => (
-                                                    <div key={idx} className="p-5 rounded-2xl border shadow-sm flex items-start gap-4" style={{ backgroundColor: '#ffffff', borderColor: '#ffe4e6' }}>
-                                                        <ArrowRight size={18} className="mt-0.5 shrink-0" style={{ color: '#e11d48' }} />
-                                                        <p className="font-bold leading-relaxed" style={{ color: '#4c0519' }}>{item}</p>
+                                            <div className="columns-1 md:columns-2 gap-x-12 space-y-3">
+                                                {selectedOfficialNote.content.bug_fixes.map((item, idx) => (
+                                                    <div key={idx} className="break-inside-avoid flex items-start gap-4 p-4 hover:bg-[#fff7ed] transition-colors rounded">
+                                                        <div className="mt-2 w-1 h-1 bg-[#f59e0b] rounded-full shrink-0"></div>
+                                                        <p className="text-[13px] font-medium text-[#64748b] leading-relaxed">{item}</p>
                                                     </div>
                                                 ))}
                                             </div>
                                         </section>
                                     )}
+
+                                    {/* Known Issues */}
+                                    <section>
+                                        <div className="flex items-baseline justify-between mb-4 border-b border-[#f1f5f9] pb-1.5">
+                                            <h3 className="text-[10px] font-bold text-[#64748b]">06. KNOWN ISSUES</h3>
+                                            <span className="text-[10px] font-medium text-[#94a3b8]">
+                                                {selectedOfficialNote.content.known_issues?.length > 0 ? `${selectedOfficialNote.content.known_issues.length} items` : 'Ongoing works'}
+                                            </span>
+                                        </div>
+                                        {selectedOfficialNote.content.known_issues?.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {selectedOfficialNote.content.known_issues.map((item, idx) => (
+                                                    <div key={idx} className="flex gap-4 items-start p-4 hover:bg-[#f8fafc] transition-colors rounded border border-transparent hover:border-[#f1f5f9]">
+                                                        <div className="mt-1.5 w-1.5 h-1.5 bg-[#94a3b8] rounded-full shrink-0"></div>
+                                                        <p className="text-[14px] font-medium text-[#64748b] leading-relaxed">{item}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-8 bg-[#f8fafc] border border-[#f1f5f9] border-dashed rounded-lg text-center">
+                                                <p className="text-[14px] text-[#94a3b8] font-medium leading-relaxed italic">
+                                                    No major known issues were reported for this release period.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </section>
+
+                                    <section className="bg-[#f8fafc] border border-[#e2e8f0] rounded-sm p-8">
+                                        <div className="flex items-center gap-4 mb-4 text-[#0f172a]">
+                                            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-[#1e293b] border border-[#e2e8f0]">
+                                                <LifeBuoy size={16} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-[10px] font-bold text-[#64748b]">07. CALL TO ACTION / SUPPORT</h3>
+                                                <p className="text-[10px] text-[#94a3b8] font-medium leading-none">Need help or discovered a bug?</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <p className="text-[14px] text-[#475569] leading-relaxed">
+                                                If you encounter any issues or need further assistance with the new features, please contact our support team.
+                                            </p>
+                                            <div className="flex flex-wrap gap-4">
+                                                <a href="mailto:support@ajilemind.com" className="px-5 py-2 bg-[#0f172a] text-[#ffffff] text-[11px] font-bold rounded-md transition-all" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                                    Email Support
+                                                </a>
+                                                <a href="#" className="px-5 py-2 border border-[#e2e8f0] text-[#0f172a] text-[11px] font-bold rounded-md hover:bg-[#f8fafc] transition-all">
+                                                    Documentation Portal
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </section>
                                 </div>
 
-                                {/* Footer & Compliance Branding */}
-                                <div className="p-12 border-t flex flex-col md:flex-row justify-between items-center gap-8" style={{ backgroundColor: 'rgba(248, 250, 252, 0.2)', borderTopColor: '#f1f5f9' }}>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-xl" style={{ backgroundColor: '#0f172a' }}>A</div>
-                                        <div>
-                                            <div className="text-[10px] font-black uppercase tracking-widest mb-0.5" style={{ color: '#cbd5e1' }}>Automated Documentation</div>
-                                            <div className="text-sm font-bold" style={{ color: '#0f172a' }}>AgileMind Enterprise Intelligence</div>
+                                {/* Security Footer / Compliance Section */}
+                                <div className="px-10 py-8 bg-[#0f172a] text-[#ffffff]">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-12">
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-4 opacity-100">
+                                                <div className="w-10 h-10 border-2 border-[#ffffff] flex items-center justify-center font-bold text-xl italic tracking-tighter" style={{ boxShadow: '0 0 20px rgba(255,255,255,0.2)' }}>A</div>
+                                                <div>
+                                                    <p className="text-[11px] font-bold mb-0.5">AgileMind Enterprise</p>
+                                                    <p className="text-[9px] font-medium text-[#94a3b8] opacity-80 leading-none">Intelligence Synthesis Group</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-[10px] text-[#94a3b8] font-medium leading-relaxed max-w-sm opacity-60">
+                                                This document is electronically verified and authorized for public distribution. Any unauthorized modification of the synthesis content is strictly prohibited by AI security protocols.
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 leading-none" style={{ color: '#cbd5e1' }}>Authentication Token</div>
-                                        <div className="font-mono text-[9px] px-3 py-1.5 rounded-lg border" style={{ color: '#94a3b8', backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
-                                            {btoa(`RN-${selectedOfficialNote.id}-${selectedOfficialNote.version}-${selectedOfficialNote.created_at}`).substring(0, 32).toUpperCase()}
+                                        <div className="text-right shrink-0">
+                                            <div className="mb-4 inline-block px-3 py-1 bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] rounded-full text-[9px] font-bold tracking-tight">Official Synthesis</div>
+                                            <div className="font-mono text-[9px] text-[#64748b] bg-[rgba(255,255,255,0.05)] px-4 py-2 border border-[rgba(255,255,255,0.1)] rounded">
+                                                {btoa(`RN-${selectedOfficialNote.id}-${selectedOfficialNote.version}-${selectedOfficialNote.created_at}`).substring(0, 8).toUpperCase()}-{selectedOfficialNote.version.replace(/\./g, '')}
+                                            </div>
+                                            <p className="text-[10px] font-bold mt-4 text-[#94a3b8]">Document Lifecycle 2026</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Contextual Action Hint */}
-                            <div className="max-w-4xl mx-auto px-12 py-12 text-center">
-                                <p className="text-xs font-medium flex items-center justify-center gap-2" style={{ color: '#94a3b8' }}>
-                                    <Clock size={12} /> This document is generated based on verified sprint completion logs.
+                            <div className="max-w-4xl mx-auto px-12 py-16 text-center">
+                                <p className="text-[#94a3b8] text-[11px] font-semibold tracking-tight flex items-center justify-center gap-3">
+                                    <Clock size={14} strokeWidth={2.5} /> Verified by Project Intelligence Protocol
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };
 
