@@ -39,6 +39,28 @@ const ReleaseNotes: React.FC = () => {
     // AI generation state
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
+    const [lastVersion, setLastVersion] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (formData.project_id) {
+            fetchLatestVersion(formData.project_id);
+        } else {
+            setLastVersion(null);
+        }
+    }, [formData.project_id]);
+
+    const fetchLatestVersion = async (projectId: number) => {
+        try {
+            const { version } = await releaseNotesApi.getLatestVersion(projectId);
+            setLastVersion(version);
+            if (version) {
+                setFormData(prev => ({ ...prev, version }));
+            }
+        } catch (error) {
+            console.error('Failed to fetch latest version:', error);
+            setLastVersion(null);
+        }
+    };
 
     useEffect(() => {
         loadProjects();
@@ -390,6 +412,12 @@ const ReleaseNotes: React.FC = () => {
                         Official Release Notes
                         <span className="text-sm text-gray-400 ml-2">({releaseNotes.length})</span>
                     </h2>
+                    <button
+                        onClick={() => { resetForm(); setShowModal(true); }}
+                        className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-sm"
+                    >
+                        <span>+</span> Create Release Note
+                    </button>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
                     <table className="w-full">
@@ -528,13 +556,26 @@ const ReleaseNotes: React.FC = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Version *</label>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-sm font-semibold text-gray-700">Version *</label>
+                                        {lastVersion && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, version: lastVersion })}
+                                                className="text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1 transition-colors"
+                                                title="Click to use this version as a base"
+                                            >
+                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                                Last: {lastVersion}
+                                            </button>
+                                        )}
+                                    </div>
                                     <input
                                         type="text"
-                                        placeholder="1.0.0"
+                                        placeholder="1.2.0"
                                         value={formData.version}
                                         onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                                         required
                                     />
                                 </div>

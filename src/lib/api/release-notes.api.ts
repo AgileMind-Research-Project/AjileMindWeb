@@ -105,4 +105,7 @@ export const releaseNotesApi = {
 
     listAllBacklogReleases: () =>
         httpClient.get('/release-notes/backlog-releases'),
+
+    getLatestVersion: (projectId: number): Promise<{ version: string | null }> =>
+        httpClient.get(`/release-notes/latest-version/${projectId}`),
 };
