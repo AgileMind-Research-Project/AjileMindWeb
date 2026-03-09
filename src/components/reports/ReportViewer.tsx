@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   FileBarChart, Edit, Download, Calendar, ChevronLeft, 
-  FileText, CheckCircle, Clock 
+  FileText, CheckCircle, Clock, AlertTriangle, User 
 } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 
@@ -115,58 +115,205 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
     }
   };
 
-  const renderDailyStandup = (content: any) => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          Yesterday's Work
-        </h3>
+  const renderPersonSection = (people: any[], dotColor: string) => {
+    if (!people || people.length === 0) return <p className="text-gray-500 dark:text-gray-400 ml-7">None reported.</p>;
+
+    // Support old flat-string format for backward compatibility
+    if (typeof people[0] === 'string') {
+      return (
         <ul className="space-y-2 ml-7">
-          {content.yesterday_work?.map((item: string, index: number) => (
-            <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-              <span className="text-blue-600 mt-1">•</span>
+          {people.map((item: string, idx: number) => (
+            <li key={idx} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+              <span className={`${dotColor} mt-1`}>•</span>
               <span>{item}</span>
             </li>
           ))}
         </ul>
-      </div>
+      );
+    }
 
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-blue-600" />
-          Today's Plan
-        </h3>
-        <ul className="space-y-2 ml-7">
-          {content.today_plan?.map((item: string, index: number) => (
-            <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-              <span className="text-blue-600 mt-1">•</span>
-              <span>{item}</span>
-            </li>
+    return (
+      <div className="space-y-4 ml-2">
+        {people.map((person: any, idx: number) => (
+          <div key={idx} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+              <span className="w-7 h-7 flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold">
+                {(person.name || 'U').charAt(0).toUpperCase()}
+              </span>
+              {person.name || 'Unknown'}
+            </p>
+            <ul className="space-y-1 ml-9">
+              {(person.tasks || []).map((task: string, tIdx: number) => (
+                <li key={tIdx} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                  <span className={`${dotColor} mt-1`}>•</span>
+                  <span>{task}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderDailyStandup = (content: any) => {
+    // New developer-centric format
+    const teamUpdates = content.team_updates;
+    const blockersSummary = content.blockers_summary;
+
+    if (teamUpdates && Array.isArray(teamUpdates) && teamUpdates.length > 0) {
+      return (
+        <div className="space-y-6">
+          {/* Per-developer sections */}
+          {teamUpdates.map((dev: any, idx: number) => (
+            <div key={idx} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm">
+              {/* Developer header */}
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="w-10 h-10 flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-sm font-bold">
+                  {(dev.name || 'U').charAt(0).toUpperCase()}
+                </span>
+                <div>
+                  <p className="font-bold text-gray-900 dark:text-white text-lg">{dev.name || 'Unknown'}</p>
+                  {dev.role && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5" />
+                      {dev.role}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Yesterday's Tasks */}
+              {dev.yesterday_tasks && dev.yesterday_tasks.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Yesterday&apos;s Tasks
+                  </h4>
+                  <ul className="space-y-1 ml-6">
+                    {dev.yesterday_tasks.map((task: string, tIdx: number) => (
+                      <li key={tIdx} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                        <span className="text-green-600 mt-1">•</span>
+                        <span>{task}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Today's Tasks */}
+              {dev.today_tasks && dev.today_tasks.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Today&apos;s Tasks
+                  </h4>
+                  <ul className="space-y-1 ml-6">
+                    {dev.today_tasks.map((task: string, tIdx: number) => (
+                      <li key={tIdx} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                        <span className="text-blue-600 mt-1">•</span>
+                        <span>{task}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Blockers */}
+              {dev.blockers && dev.blockers.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Blockers &amp; Issues
+                  </h4>
+                  <ul className="space-y-1 ml-6">
+                    {dev.blockers.map((b: string, bIdx: number) => (
+                      <li key={bIdx} className="text-red-700 dark:text-red-300 flex items-start gap-2">
+                        <span className="text-red-600 mt-1">•</span>
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* No blockers message */}
+              {(!dev.blockers || dev.blockers.length === 0) && (
+                <p className="text-gray-400 dark:text-gray-500 text-sm italic ml-6">No blockers reported.</p>
+              )}
+            </div>
           ))}
-        </ul>
-      </div>
 
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-          <FileText className="w-5 h-5 text-red-600" />
-          Blockers & Issues
-        </h3>
-        {content.blockers && content.blockers.length > 0 ? (
-          <ul className="space-y-2 ml-7">
-            {content.blockers.map((item: string, index: number) => (
-              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-                <span className="text-red-600 mt-1">•</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-500 dark:text-gray-400 ml-7">No blockers reported.</p>
-        )}
+          {/* Blockers Summary */}
+          {blockersSummary && blockersSummary.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Blockers Summary
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+                  <thead className="bg-gray-100 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Title</th>
+                      <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Description</th>
+                      <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Reported By</th>
+                      <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {blockersSummary.map((bs: any, bsIdx: number) => (
+                      <tr key={bsIdx} className="border-t border-gray-200 dark:border-gray-600">
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{bs.title}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{bs.description || ''}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                          {bs.reported_by ? bs.reported_by.join(', ') : ''}
+                        </td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{bs.impact || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Legacy fallback: old section-based format
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            Yesterday&apos;s Work
+          </h3>
+          {renderPersonSection(content.yesterday_work, 'text-green-600')}
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-600" />
+            Today&apos;s Plan
+          </h3>
+          {renderPersonSection(content.today_plan, 'text-blue-600')}
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-red-600" />
+            Blockers &amp; Issues
+          </h3>
+          {content.blockers && content.blockers.length > 0 ? (
+            renderPersonSection(content.blockers, 'text-red-600')
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400 ml-7">No blockers reported.</p>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderSprintMeeting = (content: any) => (
     <div className="space-y-6">
@@ -215,16 +362,25 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Action Items</h3>
         {content.action_items && content.action_items.length > 0 ? (
-          <div className="space-y-3">
-            {content.action_items.map((item: any, index: number) => (
-              <div key={index} className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <p className="font-medium text-gray-900 dark:text-white mb-2">{item.action}</p>
-                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                  <span>Assignee: <strong>{item.assignee || "Unassigned"}</strong></span>
-                  <span>Due: <strong>{item.due_date || "No deadline"}</strong></span>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Task</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Assignee</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Due Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {content.action_items.map((item: any, index: number) => (
+                  <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.action || item.task}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.assignee || 'Unassigned'}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.due_date || 'No deadline'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <p className="text-gray-500 dark:text-gray-400 ml-7">No action items.</p>
@@ -282,32 +438,37 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
           🎯 Action Points
         </h3>
         {content.action_points && content.action_points.length > 0 ? (
-          <div className="space-y-3">
-            {content.action_points.map((item: any, index: number) => {
-              // Handle both string and object formats
-              if (typeof item === 'string') {
-                return (
-                  <div key={index} className="ml-7 text-gray-700 dark:text-gray-300 flex items-start gap-2">
-                    <span className="text-purple-600 mt-1">•</span>
-                    <span>{item}</span>
-                  </div>
-                );
-              } else if (typeof item === 'object' && item !== null) {
-                return (
-                  <div key={index} className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                    <p className="font-medium text-gray-900 dark:text-white mb-2">
-                      {item.task || item.action || item.description || 'Action item'}
-                    </p>
-                    <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                      {item.assignee && <span>Assignee: <strong>{item.assignee}</strong></span>}
-                      {item.due_date && <span>Due: <strong>{item.due_date}</strong></span>}
-                      {item.priority && <span>Priority: <strong>{item.priority}</strong></span>}
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Action</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Assignee</th>
+                </tr>
+              </thead>
+              <tbody>
+                {content.action_points.map((item: any, index: number) => {
+                  if (typeof item === 'string') {
+                    return (
+                      <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300"></td>
+                      </tr>
+                    );
+                  } else if (typeof item === 'object' && item !== null) {
+                    return (
+                      <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                          {item.task || item.action || item.description || 'Action item'}
+                        </td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.assignee || ''}</td>
+                      </tr>
+                    );
+                  }
+                  return null;
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <p className="text-gray-500 dark:text-gray-400 ml-7">No action points.</p>
@@ -362,17 +523,31 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
       {content.ideas_generated && content.ideas_generated.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-blue-700 dark:text-blue-400 mb-3">💭 Ideas Generated</h3>
-          <div className="space-y-3">
-            {content.ideas_generated.map((item: any, index: number) => (
-              <div key={index} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="font-medium text-gray-900 dark:text-white mb-2">{item.idea}</p>
-                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                  {item.proposed_by && <span>By: <strong>{item.proposed_by}</strong></span>}
-                  {item.category && <span>Category: <strong>{item.category}</strong></span>}
-                  {item.votes > 0 && <span>Votes: <strong>{item.votes}</strong></span>}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Idea</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Proposed By</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Category</th>
+                  {content.ideas_generated.some((item: any) => item.votes > 0) && (
+                    <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Votes</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {content.ideas_generated.map((item: any, index: number) => (
+                  <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.idea}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.proposed_by || ''}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.category || ''}</td>
+                    {content.ideas_generated.some((item: any) => item.votes > 0) && (
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.votes || 0}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -409,21 +584,28 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
       {content.decisions_made && content.decisions_made.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-indigo-700 dark:text-indigo-400 mb-3">✅ Decisions Made</h3>
-          <ul className="space-y-2 ml-7">
-            {content.decisions_made.map((decision: any, index: number) => (
-              <li key={index} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
-                <span className="text-indigo-600 mt-1">•</span>
-                <span>
-                  {typeof decision === 'string' ? decision : decision.decision}
-                  {typeof decision === 'object' && decision.assignee && (
-                    <span className="ml-2 text-sm text-indigo-600 dark:text-indigo-400">
-                      (Assignee: {decision.assignee})
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Decision</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Assignee</th>
+                </tr>
+              </thead>
+              <tbody>
+                {content.decisions_made.map((item: any, index: number) => (
+                  <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                      {typeof item === 'string' ? item : item.decision}
+                    </td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                      {typeof item === 'object' ? (item.assignee || '') : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -431,22 +613,141 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
       {content.next_steps && content.next_steps.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-orange-700 dark:text-orange-400 mb-3">🚀 Next Steps</h3>
-          <div className="space-y-3">
-            {content.next_steps.map((item: any, index: number) => (
-              <div key={index} className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                <p className="font-medium text-gray-900 dark:text-white mb-2">{item.task}</p>
-                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                  {item.assignee && <span>Assignee: <strong>{item.assignee}</strong></span>}
-                  {item.due_date && <span>Due: <strong>{item.due_date}</strong></span>}
-                  {item.priority && <span>Priority: <strong>{item.priority}</strong></span>}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Task</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Assignee</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Due Date</th>
+                  <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Priority</th>
+                </tr>
+              </thead>
+              <tbody>
+                {content.next_steps.map((item: any, index: number) => (
+                  <tr key={index} className="border-t border-gray-200 dark:border-gray-600">
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.task}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.assignee || ''}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.due_date || ''}</td>
+                    <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{item.priority || ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
     </div>
   );
+
+  // Generic renderer for template-based reports with dynamic keys
+  const formatSectionTitle = (key: string): string => {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const renderTemplateSection = (key: string, value: any, displayTitle?: string) => {
+    if (key === 'header_image' || key === 'footer_image' || key === '_sections_order') return null;
+    const sectionTitle = displayTitle || formatSectionTitle(key);
+
+    if (typeof value === 'string') {
+      return (
+        <div key={key}>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            {sectionTitle}
+          </h3>
+          <p className="text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+            {value}
+          </p>
+        </div>
+      );
+    }
+
+    if (Array.isArray(value)) {
+      // Array of strings (bullet list)
+      if (value.length > 0 && typeof value[0] === 'string') {
+        return (
+          <div key={key}>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              {sectionTitle}
+            </h3>
+            <ul className="space-y-2 ml-7">
+              {value.map((item: string, idx: number) => (
+                <li key={idx} className="text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                  <span className="text-blue-600 mt-1">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      }
+      // Array of objects (table)
+      if (value.length > 0 && typeof value[0] === 'object') {
+        const columns = Object.keys(value[0]);
+        return (
+          <div key={key}>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              {sectionTitle}
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left border border-gray-200 dark:border-gray-600 rounded-lg">
+                <thead className="bg-gray-100 dark:bg-gray-700">
+                  <tr>
+                    {columns.map(col => (
+                      <th key={col} className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">
+                        {formatSectionTitle(col)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {value.map((row: any, idx: number) => (
+                    <tr key={idx} className="border-t border-gray-200 dark:border-gray-600">
+                      {columns.map(col => (
+                        <td key={col} className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                          {typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col] ?? '')}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+    }
+
+    return null;
+  };
+
+  const renderTemplateReport = (content: any) => {
+    const sectionsOrder = content._sections_order as Array<{ key: string; title: string; type: string; order: number }> | undefined;
+
+    if (sectionsOrder && sectionsOrder.length > 0) {
+      // Render in the exact template order using stored metadata
+      return (
+        <div className="space-y-6">
+          {sectionsOrder
+            .sort((a, b) => a.order - b.order)
+            .map(({ key, title }) => {
+              const value = content[key];
+              if (value === undefined) return null;
+              return renderTemplateSection(key, value, title);
+            })}
+        </div>
+      );
+    }
+
+    // Fallback: iterate keys as-is
+    return (
+      <div className="space-y-6">
+        {Object.entries(content)
+          .filter(([key]) => key !== 'header_image' && key !== 'footer_image' && key !== '_sections_order')
+          .map(([key, value]) => renderTemplateSection(key, value))}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -559,10 +860,16 @@ export default function ReportViewer({ reportId, onEdit }: ReportViewerProps) {
 
         {/* Report Content */}
         <div className="p-8">
-          {report.report_type === "daily_standup" && renderDailyStandup(report.report_content)}
-          {report.report_type === "sprint_meeting" && renderSprintMeeting(report.report_content)}
-          {report.report_type === "retrospective" && renderRetrospective(report.report_content)}
-          {report.report_type === "brainstorming" && renderBrainstorming(report.report_content)}
+          {report.template_id ? (
+            renderTemplateReport(report.report_content)
+          ) : (
+            <>
+              {report.report_type === "daily_standup" && renderDailyStandup(report.report_content)}
+              {report.report_type === "sprint_meeting" && renderSprintMeeting(report.report_content)}
+              {report.report_type === "retrospective" && renderRetrospective(report.report_content)}
+              {report.report_type === "brainstorming" && renderBrainstorming(report.report_content)}
+            </>
+          )}
         </div>
 
         {/* Footer Image */}

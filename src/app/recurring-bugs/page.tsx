@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bug, Check, X, ChevronLeft, ChevronRight, AlertTriangle,
-  PlusCircle, Calendar, Eye, Flame, TrendingUp
+  Calendar, Eye, Flame, TrendingUp
 } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -96,48 +96,6 @@ export default function RecurringBugsPage() {
     }
   };
 
-  const handleCreateBacklog = async (bugHash: string) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/recurring-bugs/${bugHash}/create-backlog`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to create backlog item");
-      }
-
-      const result = await response.json();
-      alert(`Backlog item created: ${result.backlog_id}`);
-      fetchBugs();
-    } catch (err: any) {
-      alert(err.message || "Failed to create backlog item");
-    }
-  };
-
-  const handleResolve = async (bugHash: string) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/recurring-bugs/${bugHash}/resolve`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to resolve bug");
-      }
-
-      fetchBugs();
-    } catch (err: any) {
-      alert(err.message || "Failed to resolve bug");
-    }
-  };
-
   const handleDismiss = async (bugHash: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/v1/recurring-bugs/${bugHash}/dismiss`, {
@@ -180,6 +138,10 @@ export default function RecurringBugsPage() {
   };
 
   const totalPages = Math.ceil(data.total / data.page_size);
+
+  function handleResolve(bug_hash: string): void {
+    throw new Error("Function not implemented.");
+  }
 
   return (
     <DashboardLayout>
@@ -340,7 +302,7 @@ export default function RecurringBugsPage() {
                                 >
                                   <Eye className="w-5 h-5" />
                                 </button>
-                                {bug.status === 'open' && (
+                                    {bug.status === 'open' && (
                                   <>
                                     <button
                                       onClick={() => handleResolve(bug.bug_hash)}
@@ -356,15 +318,6 @@ export default function RecurringBugsPage() {
                                     >
                                       <X className="w-5 h-5" />
                                     </button>
-                                    {bug.is_recurring && (
-                                      <button
-                                        onClick={() => handleCreateBacklog(bug.bug_hash)}
-                                        className="text-purple-600 hover:text-purple-700 dark:text-purple-400"
-                                        title="Create Backlog Item"
-                                      >
-                                        <PlusCircle className="w-5 h-5" />
-                                      </button>
-                                    )}
                                   </>
                                 )}
                               </div>
@@ -477,17 +430,6 @@ export default function RecurringBugsPage() {
                     >
                       Mark Resolved
                     </button>
-                    {viewingBug.is_recurring && (
-                      <button
-                        onClick={() => {
-                          handleCreateBacklog(viewingBug.bug_hash);
-                          setViewingBug(null);
-                        }}
-                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg"
-                      >
-                        Create Backlog
-                      </button>
-                    )}
                   </>
                 )}
                 <button

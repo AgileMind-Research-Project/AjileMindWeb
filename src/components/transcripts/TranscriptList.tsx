@@ -51,7 +51,6 @@ export default function TranscriptList() {
     dateFrom: "",
     dateTo: "",
     search: "",
-    page: 1,
     projectId: "",
     reportGenerated: ""
   });
@@ -106,8 +105,7 @@ export default function TranscriptList() {
       if (filters.dateTo) params.append("date_to", filters.dateTo);
       if (filters.search) params.append("search", filters.search);
       if (filters.reportGenerated) params.append("report_generated", filters.reportGenerated);
-      params.append("page", filters.page.toString());
-      params.append("page_size", "20");
+      // Removed pagination: fetch all matching transcripts
 
       const response = await fetch(`${API_BASE}/api/v1/transcripts?${params.toString()}`, {
         headers: {
@@ -176,7 +174,7 @@ export default function TranscriptList() {
     );
   };
 
-  const totalPages = Math.ceil(data.total / data.page_size);
+  const totalPages = 1;
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -404,30 +402,10 @@ export default function TranscriptList() {
                   </table>
                 </div>
 
-                {/* Pagination */}
                 <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Showing {((data.page - 1) * data.page_size) + 1} to {Math.min(data.page * data.page_size, data.total)} of {data.total} transcripts
+                    Showing {data.transcripts.length} of {data.total} transcripts
                   </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-                      disabled={data.page === 1}
-                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <span className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                      Page {data.page} of {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-                      disabled={data.page >= totalPages}
-                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
                 </div>
               </>
             )}

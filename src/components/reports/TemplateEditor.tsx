@@ -12,9 +12,8 @@ const API_BASE = "http://localhost:8000";
 // Available sections per report type
 const SECTIONS_BY_TYPE: Record<string, { key: string; title: string; type: string }[]> = {
   daily_standup: [
-    { key: "yesterday_work", title: "Yesterday's Work", type: "bullet_list" },
-    { key: "today_plan", title: "Today's Plan", type: "bullet_list" },
-    { key: "blockers", title: "Blockers & Issues", type: "bullet_list" },
+    { key: "team_updates", title: "Team Updates (per developer)", type: "table" },
+    { key: "blockers_summary", title: "Blockers Summary", type: "table" },
   ],
   sprint_meeting: [
     { key: "sprint_goals", title: "Sprint Goals", type: "bullet_list" },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Save, X, Plus, Trash2, Loader2, ImagePlus, Image } from "lucide-react";
+import { Save, X, Plus, Trash2, Loader2, ImagePlus, Image, CheckCircle, Clock, AlertTriangle, User } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 
 const API_BASE = 'http://localhost:8000';
@@ -278,114 +278,204 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
     </div>
   );
 
+  // ===== Developer-centric standup editing helpers =====
+  const getTeamUpdates = (): any[] => {
+    const updates = editedContent?.team_updates;
+    if (Array.isArray(updates) && updates.length > 0) return updates;
+    // Legacy format migration for editing
+    if (editedContent?.yesterday_work || editedContent?.today_plan || editedContent?.blockers) {
+      const personMap: Record<string, any> = {};
+      for (const [field, target] of [['yesterday_work', 'yesterday_tasks'], ['today_plan', 'today_tasks'], ['blockers', 'blockers']] as const) {
+        const items = editedContent?.[field] || [];
+        for (const item of items) {
+          if (typeof item === 'object' && item.name) {
+            if (!personMap[item.name]) personMap[item.name] = { name: item.name, role: '', yesterday_tasks: [], today_tasks: [], blockers: [] };
+            personMap[item.name][target] = item.tasks || [];
+          }
+        }
+      }
+      return Object.values(personMap).length > 0 ? Object.values(personMap) : [{ name: '', role: '', yesterday_tasks: [''], today_tasks: [''], blockers: [] }];
+    }
+    return [{ name: '', role: '', yesterday_tasks: [''], today_tasks: [''], blockers: [] }];
+  };
+
+  const updateDevField = (devIdx: number, field: string, value: any) => {
+    setEditedContent((prev: any) => {
+      const updates = [...(prev.team_updates || getTeamUpdates())];
+      updates[devIdx] = { ...updates[devIdx], [field]: value };
+      return { ...prev, team_updates: updates };
+    });
+  };
+
+  const updateDevTask = (devIdx: number, taskField: string, taskIdx: number, value: string) => {
+    setEditedContent((prev: any) => {
+      const updates = [...(prev.team_updates || getTeamUpdates())];
+      const tasks = [...(updates[devIdx]?.[taskField] || [])];
+      tasks[taskIdx] = value;
+      updates[devIdx] = { ...updates[devIdx], [taskField]: tasks };
+      return { ...prev, team_updates: updates };
+    });
+  };
+
+  const addDevTask = (devIdx: number, taskField: string) => {
+    setEditedContent((prev: any) => {
+      const updates = [...(prev.team_updates || getTeamUpdates())];
+      const tasks = [...(updates[devIdx]?.[taskField] || []), ''];
+      updates[devIdx] = { ...updates[devIdx], [taskField]: tasks };
+      return { ...prev, team_updates: updates };
+    });
+  };
+
+  const removeDevTask = (devIdx: number, taskField: string, taskIdx: number) => {
+    setEditedContent((prev: any) => {
+      const updates = [...(prev.team_updates || getTeamUpdates())];
+      const tasks = (updates[devIdx]?.[taskField] || []).filter((_: any, i: number) => i !== taskIdx);
+      updates[devIdx] = { ...updates[devIdx], [taskField]: tasks };
+      return { ...prev, team_updates: updates };
+    });
+  };
+
+  const addDeveloper = () => {
+    setEditedContent((prev: any) => ({
+      ...prev,
+      team_updates: [...(prev.team_updates || getTeamUpdates()), { name: '', role: '', yesterday_tasks: [''], today_tasks: [''], blockers: [] }]
+    }));
+  };
+
+  const removeDeveloper = (devIdx: number) => {
+    setEditedContent((prev: any) => ({
+      ...prev,
+      team_updates: (prev.team_updates || []).filter((_: any, i: number) => i !== devIdx)
+    }));
+  };
+
+  // Blockers summary editing helpers
+  const getBlockersSummary = (): any[] => editedContent?.blockers_summary || [];
+
+  const updateBlockerSummary = (bsIdx: number, field: string, value: any) => {
+    setEditedContent((prev: any) => {
+      const summary = [...(prev.blockers_summary || [])];
+      summary[bsIdx] = { ...summary[bsIdx], [field]: value };
+      return { ...prev, blockers_summary: summary };
+    });
+  };
+
+  const addBlockerSummary = () => {
+    setEditedContent((prev: any) => ({
+      ...prev,
+      blockers_summary: [...(prev.blockers_summary || []), { title: '', description: '', reported_by: [], impact: '' }]
+    }));
+  };
+
+  const removeBlockerSummary = (bsIdx: number) => {
+    setEditedContent((prev: any) => ({
+      ...prev,
+      blockers_summary: (prev.blockers_summary || []).filter((_: any, i: number) => i !== bsIdx)
+    }));
+  };
+
+  const renderTaskListEditor = (devIdx: number, taskField: string, label: string, icon: React.ReactNode, color: string) => (
+    <div className="mb-3">
+      <div className="flex justify-between items-center mb-1">
+        <h4 className={`text-sm font-semibold ${color} flex items-center gap-1`}>
+          {icon} {label}
+        </h4>
+        <button type="button" onClick={() => addDevTask(devIdx, taskField)}
+          className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-xs">
+          <Plus className="w-3 h-3" /> Add
+        </button>
+      </div>
+      <div className="space-y-1.5 ml-4">
+        {((editedContent?.team_updates || getTeamUpdates())[devIdx]?.[taskField] || []).map((task: string, tIdx: number) => (
+          <div key={tIdx} className="flex gap-2">
+            <input type="text" value={task || ''}
+              onChange={(e) => updateDevTask(devIdx, taskField, tIdx, e.target.value)}
+              className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+            />
+            <button type="button" onClick={() => removeDevTask(devIdx, taskField, tIdx)}
+              className="text-red-600 hover:text-red-700">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderDailyStandupEditor = () => (
     <div className="space-y-6">
-      {/* Yesterday's Work */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Yesterday's Work
-          </h3>
-          <button
-            type="button"
-            onClick={() => addArrayItem("yesterday_work")}
-            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Item
-          </button>
-        </div>
-        <div className="space-y-2">
-          {getArrayField("yesterday_work").map((item: string, index: number) => (
-            <div key={index} className="flex gap-2">
-              <input
-                type="text"
-                value={item || ''}
-                onChange={(e) => updateArrayField("yesterday_work", index, e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => removeArrayItem("yesterday_work", index)}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            </div>
-          ))}
-        </div>
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Team Updates</h3>
+        <button type="button" onClick={addDeveloper}
+          className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm">
+          <Plus className="w-4 h-4" /> Add Developer
+        </button>
       </div>
 
-      {/* Today's Plan */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Today's Plan
-          </h3>
-          <button
-            type="button"
-            onClick={() => addArrayItem("today_plan")}
-            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Item
-          </button>
-        </div>
-        <div className="space-y-2">
-          {getArrayField("today_plan").map((item: string, index: number) => (
-            <div key={index} className="flex gap-2">
-              <input
-                type="text"
-                value={item || ''}
-                onChange={(e) => updateArrayField("today_plan", index, e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => removeArrayItem("today_plan", index)}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+      {(editedContent?.team_updates || getTeamUpdates()).map((dev: any, dIdx: number) => (
+        <div key={dIdx} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
+          {/* Developer name & role */}
+          <div className="flex gap-2 mb-4">
+            <input type="text" placeholder="Developer name"
+              value={dev.name || ''}
+              onChange={(e) => updateDevField(dIdx, 'name', e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white font-medium"
+            />
+            <input type="text" placeholder="Role (e.g. Backend Developer)"
+              value={dev.role || ''}
+              onChange={(e) => updateDevField(dIdx, 'role', e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+            />
+            <button type="button" onClick={() => removeDeveloper(dIdx)}
+              className="text-red-600 hover:text-red-700 p-2">
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
 
-      {/* Blockers */}
+          {renderTaskListEditor(dIdx, 'yesterday_tasks', "Yesterday's Tasks", <CheckCircle className="w-3.5 h-3.5" />, 'text-green-700 dark:text-green-400')}
+          {renderTaskListEditor(dIdx, 'today_tasks', "Today's Tasks", <Clock className="w-3.5 h-3.5" />, 'text-blue-700 dark:text-blue-400')}
+          {renderTaskListEditor(dIdx, 'blockers', "Blockers & Issues", <AlertTriangle className="w-3.5 h-3.5" />, 'text-red-700 dark:text-red-400')}
+        </div>
+      ))}
+
+      {/* Blockers Summary */}
       <div>
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Blockers & Issues
-          </h3>
-          <button
-            type="button"
-            onClick={() => addArrayItem("blockers")}
-            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Item
+          <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">Blockers Summary</h3>
+          <button type="button" onClick={addBlockerSummary}
+            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm">
+            <Plus className="w-4 h-4" /> Add Blocker
           </button>
         </div>
-        <div className="space-y-2">
-          {getArrayField("blockers").map((item: string, index: number) => (
-            <div key={index} className="flex gap-2">
-              <input
-                type="text"
-                value={item || ''}
-                onChange={(e) => updateArrayField("blockers", index, e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+        {getBlockersSummary().map((bs: any, bsIdx: number) => (
+          <div key={bsIdx} className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-3">
+            <div className="flex gap-2 mb-2">
+              <input type="text" placeholder="Blocker title"
+                value={bs.title || ''}
+                onChange={(e) => updateBlockerSummary(bsIdx, 'title', e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white font-medium"
               />
-              <button
-                type="button"
-                onClick={() => removeArrayItem("blockers", index)}
-                className="text-red-600 hover:text-red-700"
-              >
+              <button type="button" onClick={() => removeBlockerSummary(bsIdx)}
+                className="text-red-600 hover:text-red-700 p-2">
                 <Trash2 className="w-5 h-5" />
               </button>
             </div>
-          ))}
-        </div>
+            <textarea placeholder="Description" value={bs.description || ''}
+              onChange={(e) => updateBlockerSummary(bsIdx, 'description', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm mb-2" rows={2}
+            />
+            <input type="text" placeholder="Reported by (comma-separated names)"
+              value={Array.isArray(bs.reported_by) ? bs.reported_by.join(', ') : (bs.reported_by || '')}
+              onChange={(e) => updateBlockerSummary(bsIdx, 'reported_by', e.target.value.split(',').map((n: string) => n.trim()).filter(Boolean))}
+              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm mb-2"
+            />
+            <input type="text" placeholder="Impact on the project"
+              value={bs.impact || ''}
+              onChange={(e) => updateBlockerSummary(bsIdx, 'impact', e.target.value)}
+              className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -617,6 +707,171 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
     </div>
   );
 
+  // Generic template-based editor for dynamic keys
+  const formatSectionTitle = (key: string): string => {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const renderTemplateSectionEditor = (key: string, value: any, displayTitle?: string) => {
+    if (key === 'header_image' || key === 'footer_image' || key === '_sections_order') return null;
+    const sectionTitle = displayTitle || formatSectionTitle(key);
+
+    // String field — textarea
+    if (typeof value === 'string') {
+      return (
+        <div key={key}>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            {sectionTitle}
+          </h3>
+          <textarea
+            value={editedContent[key] || ''}
+            onChange={(e) => setEditedContent((prev: any) => ({ ...prev, [key]: e.target.value }))}
+            rows={4}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+          />
+        </div>
+      );
+    }
+
+    // Array of strings — editable list
+    if (Array.isArray(value) && (value.length === 0 || typeof value[0] === 'string')) {
+      return (
+        <div key={key}>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {sectionTitle}
+            </h3>
+            <button
+              type="button"
+              onClick={() => addArrayItem(key)}
+              className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
+            >
+              <Plus className="w-4 h-4" /> Add Item
+            </button>
+          </div>
+          <div className="space-y-2">
+            {getArrayField(key).map((item: string, idx: number) => (
+              <div key={idx} className="flex gap-2">
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => updateArrayField(key, idx, e.target.value)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+                <button type="button" onClick={() => removeArrayItem(key, idx)}
+                  className="text-red-600 hover:text-red-700 p-2">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Array of objects — editable table rows
+    if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+      const columns = Object.keys(value[0]);
+      return (
+        <div key={key}>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {sectionTitle}
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                const emptyRow: any = {};
+                columns.forEach(c => { emptyRow[c] = ''; });
+                setEditedContent((prev: any) => ({
+                  ...prev,
+                  [key]: [...(prev[key] || []), emptyRow]
+                }));
+              }}
+              className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
+            >
+              <Plus className="w-4 h-4" /> Add Row
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  {columns.map(col => (
+                    <th key={col} className="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">
+                      {formatSectionTitle(col)}
+                    </th>
+                  ))}
+                  <th className="w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(editedContent[key] || []).map((row: any, rowIdx: number) => (
+                  <tr key={rowIdx} className="border-t border-gray-200 dark:border-gray-600">
+                    {columns.map(col => (
+                      <td key={col} className="px-2 py-1">
+                        <input
+                          type="text"
+                          value={row[col] ?? ''}
+                          onChange={(e) => {
+                            setEditedContent((prev: any) => {
+                              const updated = [...prev[key]];
+                              updated[rowIdx] = { ...updated[rowIdx], [col]: e.target.value };
+                              return { ...prev, [key]: updated };
+                            });
+                          }}
+                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                        />
+                      </td>
+                    ))}
+                    <td className="px-2 py-1">
+                      <button type="button" onClick={() => {
+                        setEditedContent((prev: any) => ({
+                          ...prev,
+                          [key]: prev[key].filter((_: any, i: number) => i !== rowIdx)
+                        }));
+                      }} className="text-red-600 hover:text-red-700">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderTemplateEditor = () => {
+    const sectionsOrder = editedContent?._sections_order as Array<{ key: string; title: string; type: string; order: number }> | undefined;
+
+    if (sectionsOrder && sectionsOrder.length > 0) {
+      return (
+        <div className="space-y-6">
+          {sectionsOrder
+            .sort((a, b) => a.order - b.order)
+            .map(({ key, title }) => {
+              const value = editedContent[key];
+              if (value === undefined) return null;
+              return renderTemplateSectionEditor(key, value, title);
+            })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {editedContent && Object.entries(editedContent)
+          .filter(([key]) => key !== 'header_image' && key !== 'footer_image' && key !== '_sections_order')
+          .map(([key, value]) => renderTemplateSectionEditor(key, value))}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6">
@@ -658,10 +913,16 @@ export default function ReportEditor({ reportId, onSave, onCancel }: ReportEdito
           {/* Header & Footer Images */}
           {renderImageUploadSection()}
           
-          {report.report_type === "daily_standup" && renderDailyStandupEditor()}
-          {report.report_type === "sprint_meeting" && renderSprintMeetingEditor()}
-          {report.report_type === "retrospective" && renderRetrospectiveEditor()}
-          {report.report_type === "brainstorming" && renderBrainstormingEditor()}
+          {report.template_id ? (
+            renderTemplateEditor()
+          ) : (
+            <>
+              {report.report_type === "daily_standup" && renderDailyStandupEditor()}
+              {report.report_type === "sprint_meeting" && renderSprintMeetingEditor()}
+              {report.report_type === "retrospective" && renderRetrospectiveEditor()}
+              {report.report_type === "brainstorming" && renderBrainstormingEditor()}
+            </>
+          )}
 
           {/* Error Message */}
           {error && (

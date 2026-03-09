@@ -6,11 +6,19 @@ import { useAuthStore } from '@/lib/store/auth.store';
 
 const API_BASE = 'http://localhost:8000';
 
+interface TemplateSection {
+  title: string;
+  type: string;
+  content: string;
+  order: number;
+}
+
 interface Template {
   id: number;
   template_name: string;
   report_type: string;
   is_default: boolean;
+  sections: TemplateSection[];
 }
 
 interface ReportGeneratorProps {
@@ -31,6 +39,7 @@ export default function ReportGenerator({ transcriptId, onClose, onGenerated }: 
   
   const [loading, setLoading] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [error, setError] = useState("");
 
   // Fetch available templates
@@ -67,6 +76,28 @@ export default function ReportGenerator({ transcriptId, onClose, onGenerated }: 
       fetchTemplates();
     }
   }, [accessToken]);
+
+  // Fetch full template details when selection changes
+  useEffect(() => {
+    if (!formData.templateId || !accessToken) {
+      setSelectedTemplate(null);
+      return;
+    }
+    const fetchTemplateDetail = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/report-templates/${formData.templateId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSelectedTemplate(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch template detail:", err);
+      }
+    };
+    fetchTemplateDetail();
+  }, [formData.templateId, accessToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +191,30 @@ export default function ReportGenerator({ transcriptId, onClose, onGenerated }: 
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 Choose a template structure for the generated report
               </p>
+
+              {/* Template Sections Preview */}
+              {selectedTemplate && selectedTemplate.sections && selectedTemplate.sections.length > 0 && (
+                <div className="mt-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 uppercase tracking-wide">
+                    Template Sections
+                  </p>
+                  <div className="space-y-1.5">
+                    {[...selectedTemplate.sections]
+                      .sort((a, b) => a.order - b.order)
+                      .map((section, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm">
+                          <span className="w-5 h-5 flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
+                            {idx + 1}
+                          </span>
+                          <span className="text-gray-800 dark:text-gray-200">{section.title}</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            ({section.type.replace('_', ' ')})
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -203,12 +258,12 @@ export default function ReportGenerator({ transcriptId, onClose, onGenerated }: 
           {/* Report Features */}
           <div className="mb-6 space-y-3">
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              The generated report will include:
+              {selectedTemplate ? `Report will follow "${selectedTemplate.template_name}" template:` : 'The generated report will include:'}
             </p>
             <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <div className="flex items-start gap-2">
                 <span className="text-green-600 dark:text-green-400">✓</span>
-                <span>Structured sections based on meeting type</span>
+                <span>{selectedTemplate ? 'Sections matching template structure' : 'Structured sections based on meeting type'}</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-green-600 dark:text-green-400">✓</span>
