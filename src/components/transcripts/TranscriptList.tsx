@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Calendar, Filter, FileText, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuthStore } from '@/lib/store/auth.store';
 
 const API_BASE = 'http://localhost:8000';
+
+const CATEGORY_MAP: Record<string, string> = {
+  'Sprint Planning': 'sprint_planning',
+  'Sprint Review': 'sprint_meeting',
+  'Technical Design Meeting': 'brainstorming',
+  'Sprint Retrospective': 'retrospective',
+  'Daily Standup': 'daily_standup'
+};
 
 interface Transcript {
   id: number;
@@ -35,9 +43,11 @@ interface TranscriptListResponse {
 
 export default function TranscriptList() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  const autoOpenAttempted = useRef(false);
 
   const [data, setData] = useState<TranscriptListResponse>({
     transcripts: [],
@@ -56,9 +66,24 @@ export default function TranscriptList() {
   });
 
   const [projects, setProjects] = useState<Project[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Hydrate filters from URL on mount
+  useEffect(() => {
+    if (!searchParams) return;
+    const project_id = searchParams.get('project_id');
+    const category_raw = searchParams.get('category');
+    const category = category_raw ? (CATEGORY_MAP[category_raw] || category_raw) : "";
+
+    if (project_id || category) {
+      setFilters(prev => ({
+        ...prev,
+        projectId: project_id || prev.projectId,
+        category: category || prev.category
+      }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -71,6 +96,15 @@ export default function TranscriptList() {
     fetchProjects();
     fetchTranscripts();
   }, [filters, isAuthenticated, hasHydrated]);
+
+  // Handle autoOpen logic
+  useEffect(() => {
+    const autoOpen = searchParams?.get('autoOpen') === 'true';
+    if (autoOpen && !loading && data.transcripts.length > 0 && !autoOpenAttempted.current) {
+      autoOpenAttempted.current = true;
+      router.push(`/transcripts/${data.transcripts[0].id}`);
+    }
+  }, [data.transcripts, loading, searchParams, router]);
 
   const fetchProjects = async () => {
     if (!accessToken) return;
@@ -370,11 +404,10 @@ export default function TranscriptList() {
                             )}
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              transcript.report_generated === 'done'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                            }`}>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${transcript.report_generated === 'done'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                              }`}>
                               {transcript.report_generated === 'done' ? 'Done' : 'Pending'}
                             </span>
                           </td>

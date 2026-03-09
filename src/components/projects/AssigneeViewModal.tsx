@@ -49,15 +49,68 @@ export default function AssigneeViewModal({
     const [users, setUsers] = useState<User[]>([]);
     const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
+    // Automation Approval State
+    const [sprintId, setSprintId] = useState<number | null>(null);
+    const [automationApproval, setAutomationApproval] = useState<any>(null);
+
     // Assignment UI
     const [assigningTask, setAssigningTask] = useState<string | null>(null); // Task ID being assigned
     const [searchUser, setSearchUser] = useState('');
 
     useEffect(() => {
         if (isOpen) {
+            fetchSprints();
             fetchData();
         }
     }, [isOpen, projectId]);
+
+    const fetchSprints = async () => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiUrl}/api/v1/projects/${projectId}/sprints`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data.sprints && data.data.sprints.length > 0) {
+                    const sprints = data.data.sprints;
+                    const activeSprint = sprints.find((s: any) => s.sprint_status === 'Active') || sprints[0];
+                    if (activeSprint) {
+                        setSprintId(activeSprint.sprint_id);
+                        fetchAutomationApproval(activeSprint.sprint_id);
+                    }
+                } else {
+                    console.warn(`No sprints found for project ${projectId}. Automation features may be disabled.`);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching sprints:', error);
+        }
+    };
+
+    const fetchAutomationApproval = async (sid: number) => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const response = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sid}/automation-approval`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    setAutomationApproval(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching automation approval:', error);
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -206,6 +259,44 @@ export default function AssigneeViewModal({
         setExpandedTasks(newExpanded);
     };
 
+    const handleApprove = async (field: 'assign_tasks', status: boolean) => {
+        if (!sprintId) {
+            ToastService.showError('No active sprint found');
+            return;
+        }
+
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+            const response = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sprintId}/automation-approval/approve`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        [field]: status
+                    })
+                }
+            );
+
+            if (response.ok) {
+                ToastService.showSuccess(status === false ? 'Approval revoked' : 'Automation approved successfully');
+                fetchAutomationApproval(sprintId);
+            } else {
+                throw new Error('Failed to update approval');
+            }
+        } catch (error) {
+            console.error('Error updating approval:', error);
+            ToastService.showError('Failed to update automation approval');
+        }
+    };
+
+    const assignLocked = !!automationApproval?.assign_tasks;
+
     const getInitials = (name: string) => {
         return name
             .split(' ')
@@ -274,7 +365,7 @@ export default function AssigneeViewModal({
                     <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-xl">
                         <div>
                             <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                                <span className="text-2xl">📋</span> Backlog Priority View
+                                <span className="text-2xl">📋</span> Assignee View
                             </h2>
                             <p className="text-sm text-gray-600 mt-1 pl-9">
                                 Manage assignments and view hierarchy for <span className="font-semibold text-gray-900">{projectName}</span>
@@ -283,6 +374,10 @@ export default function AssigneeViewModal({
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={async () => {
+                                    if (!assignLocked) {
+                                        ToastService.showWarning('Please approve assignment automation first');
+                                        return;
+                                    }
                                     try {
                                         const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
                                         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -329,7 +424,9 @@ export default function AssigneeViewModal({
                                         ToastService.showError('Failed to sync to Jira');
                                     }
                                 }}
-                                className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                                disabled={!assignLocked}
+                                className={`px-3 py-1.5 text-sm font-medium text-white rounded-md transition-colors flex items-center gap-2 ${!assignLocked ? 'bg-gray-400 cursor-not-allowed opacity-60' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                title={!assignLocked ? 'Approve assignment to enable' : ''}
                             >
                                 <span>🔄</span> Confirm Tasks
                             </button>
@@ -383,10 +480,13 @@ export default function AssigneeViewModal({
                                                 <div className="flex flex-col items-end min-w-[150px]">
                                                     <button
                                                         onClick={() => {
-                                                            setAssigningTask(item.id);
-                                                            setSearchUser('');
+                                                            if (!assignLocked) {
+                                                                setAssigningTask(item.id);
+                                                                setSearchUser('');
+                                                            }
                                                         }}
-                                                        className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group/assignee"
+                                                        disabled={assignLocked}
+                                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all group/assignee ${assignLocked ? 'bg-gray-50 border-gray-100 cursor-not-allowed opacity-80' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}
                                                     >
                                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${item.assignee ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>
                                                             {item.assignee ? getInitials(item.assignee) : '?'}
@@ -394,7 +494,7 @@ export default function AssigneeViewModal({
                                                         <span className={`text-sm max-w-[100px] truncate ${item.assignee ? 'text-gray-900' : 'text-gray-400 italic'}`}>
                                                             {item.assignee || 'Unassigned'}
                                                         </span>
-                                                        <svg className="w-3 h-3 text-gray-400 group-hover/assignee:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                        <svg className={`w-3 h-3 text-gray-400 ${!assignLocked && 'group-hover/assignee:text-blue-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                                                     </button>
                                                 </div>
 
@@ -425,10 +525,13 @@ export default function AssigneeViewModal({
                                                                 {/* Subtask Assignee */}
                                                                 <button
                                                                     onClick={() => {
-                                                                        setAssigningTask(sub.id);
-                                                                        setSearchUser('');
+                                                                        if (!assignLocked) {
+                                                                            setAssigningTask(sub.id);
+                                                                            setSearchUser('');
+                                                                        }
                                                                     }}
-                                                                    className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                                                    disabled={assignLocked}
+                                                                    className={`flex items-center gap-2 px-2 py-1 rounded transition-colors ${assignLocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-100'}`}
                                                                 >
                                                                     <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${sub.assignee ? 'bg-teal-100 text-teal-700' : 'bg-gray-200 text-gray-400'}`}>
                                                                         {sub.assignee ? getInitials(sub.assignee) : '?'}
@@ -449,6 +552,38 @@ export default function AssigneeViewModal({
                                 })}
                             </div>
                         )}
+                    </div>
+
+                    {/* Footer Added for Approval */}
+                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-white rounded-b-xl">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Assign Automation</span>
+                            <div className="flex items-center gap-2 mt-1">
+                                {assignLocked ? (
+                                    <button
+                                        onClick={() => handleApprove('assign_tasks', false)}
+                                        className="px-3 py-1 text-xs font-semibold text-gray-700 bg-yellow-100 border border-yellow-300 rounded hover:bg-yellow-200 transition-colors flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                        Change Assign
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => handleApprove('assign_tasks', true)}
+                                        className="px-3 py-1 text-xs font-semibold text-white bg-indigo-600 rounded hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                        Approve Assign
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-2 text-sm font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-all shadow-sm"
+                        >
+                            Close
+                        </button>
                     </div>
                 </div>
             </div>
