@@ -6,7 +6,7 @@ interface JiraStatusBadgeProps {
 }
 
 export default function JiraStatusBadge({ ticketId }: JiraStatusBadgeProps) {
-    const [status, setStatus] = useState<any>(null);
+    const [statusData, setStatusData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
 
@@ -20,7 +20,7 @@ export default function JiraStatusBadge({ ticketId }: JiraStatusBadgeProps) {
             try {
                 const response = await jiraApi.getIssueStatus(ticketId);
                 if (mounted && response.success && response.data) {
-                    setStatus(response.data.status);
+                    setStatusData(response.data);
                 } else if (mounted) {
                     setError(true);
                 }
@@ -47,15 +47,16 @@ export default function JiraStatusBadge({ ticketId }: JiraStatusBadgeProps) {
         );
     }
 
-    if (error || !status) {
+    if (error || !statusData) {
         return null;
-        // Or render a fallback: <span className="text-xs text-gray-400">Status Error</span>
     }
+
+    const statusName = statusData.status || 'Unknown';
+    const category = (statusData.status_category || '').toLowerCase();
+    const name = statusName.toLowerCase();
 
     // Determine color styles based on category/name
     let colorClass = 'bg-gray-100 text-gray-700 border-gray-200';
-    const category = status.category?.toLowerCase() || '';
-    const name = status.name?.toLowerCase() || '';
 
     if (category === 'done' || name === 'done' || name === 'completed') {
         colorClass = 'bg-green-50 text-green-700 border-green-200';
@@ -68,9 +69,9 @@ export default function JiraStatusBadge({ ticketId }: JiraStatusBadgeProps) {
     return (
         <span
             className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${colorClass}`}
-            title={`Jira Status: ${status.name}`}
+            title={`Jira Status: ${statusName}`}
         >
-            🎫 {status.name}
+            🎫 {statusName}
         </span>
     );
 }

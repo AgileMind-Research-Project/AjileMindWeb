@@ -52,7 +52,7 @@ export default function ViewMeetingModal({
     // Reset state when meeting changes
     useEffect(() => {
         if (meeting) {
-            setTranscriptText(meeting.meeting_transcript || '');
+            setTranscriptText(meeting.transcript_content || '');
             setIsEditing(false);
             setActiveTab(extractionMode ? 'tasks' : 'transcript');
         }
@@ -65,7 +65,7 @@ export default function ViewMeetingModal({
                 setLoadingSprints(true);
                 try {
                     // Use active sprints endpoint to get tasks
-                    const response = await projectsApi.getActiveSprints(Number(meeting.project_id), meeting.date);
+                    const response = await projectsApi.getActiveSprints(Number(meeting.project_id), meeting.meeting_date);
                     if (response.success) {
                         setSprints(response.data.sprints || []);
                     }
@@ -127,6 +127,30 @@ export default function ViewMeetingModal({
         return colors[status] || 'bg-gray-100 text-gray-700';
     };
 
+    const formatTime = (timeValue: string | number | undefined) => {
+        if (!timeValue && timeValue !== 0) return 'N/A';
+
+        if (!isNaN(Number(timeValue))) {
+            const totalSeconds = Number(timeValue);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const formattedHours = hours % 12 || 12;
+            const formattedMinutes = minutes.toString().padStart(2, '0');
+            return `${formattedHours}:${formattedMinutes} ${ampm}`;
+        }
+
+        if (typeof timeValue === 'string' && timeValue.includes(':')) {
+            const [h, m] = timeValue.split(':');
+            const hours = parseInt(h, 10);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const formattedHours = hours % 12 || 12;
+            return `${formattedHours}:${m} ${ampm}`;
+        }
+
+        return String(timeValue);
+    };
+
     return (
         <div className="fixed inset-0 z-[100] overflow-hidden flex items-center justify-center p-4">
             {/* Backdrop with blur and transparency */}
@@ -152,13 +176,13 @@ export default function ViewMeetingModal({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
-                                {meeting.date}
+                                {meeting.meeting_date}
                             </span>
                             <span className="flex items-center gap-2">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                {meeting.start_time} - {meeting.end_time}
+                                {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}
                             </span>
                         </div>
                     </div>
@@ -183,24 +207,27 @@ export default function ViewMeetingModal({
                             <div>
                                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Description</h3>
                                 <div className="prose prose-sm max-w-none text-gray-700 bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                                    {meeting.description || <span className="italic text-gray-400">No description provided.</span>}
+                                    <span className="italic text-gray-400">No description available.</span>
                                 </div>
                             </div>
 
                             {/* Attendees */}
                             <div>
                                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Attendees</h3>
-                                {meeting.attendees && meeting.attendees.length > 0 ? (
+                                {Array.isArray(meeting.attendees) && meeting.attendees.length > 0 ? (
                                     <div className="space-y-2">
                                         {meeting.attendees.map((attendee, index) => {
                                             const colors = ['bg-blue-100 text-blue-700', 'bg-green-100 text-green-700', 'bg-purple-100 text-purple-700', 'bg-orange-100 text-orange-700'];
                                             const colorClass = colors[index % colors.length];
+                                            const displayName = typeof attendee === 'string' ? attendee :
+                                                (attendee && typeof attendee === 'object' ? ((attendee as any).email || (attendee as any).username || (attendee as any).name || String(attendee)) : 'User');
+                                            const safeDisplayName = String(displayName);
                                             return (
                                                 <div key={index} className="flex items-center gap-3 p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${colorClass}`}>
-                                                        {attendee.substring(0, 2).toUpperCase()}
+                                                        {safeDisplayName.substring(0, 2).toUpperCase()}
                                                     </div>
-                                                    <span className="text-sm font-medium text-gray-700 truncate">{attendee}</span>
+                                                    <span className="text-sm font-medium text-gray-700 truncate">{safeDisplayName}</span>
                                                 </div>
                                             )
                                         })}
@@ -216,7 +243,44 @@ export default function ViewMeetingModal({
                                 <dl className="grid grid-cols-1 gap-4 text-sm">
                                     <div>
                                         <dt className="text-gray-500 text-xs">Category</dt>
-                                        <dd className="font-medium text-gray-900 mt-1">{meeting.category}</dd>
+                                        <dd className="font-medium text-gray-900 mt-1">{meeting.meeting_category || 'N/A'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500 text-xs">Status</dt>
+                                        <dd className="mt-1">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase
+                                                ${meeting.status === 'SCHEDULED' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                                    meeting.status === 'COMPLETED' ? 'bg-gray-100 text-gray-700 border border-gray-200' :
+                                                        meeting.status === 'CANCELLED' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                                                {meeting.status}
+                                            </span>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500 text-xs flex justify-between items-center">
+                                            <span>Meeting Link</span>
+                                            {meeting.meeting_link && (
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(meeting.meeting_link);
+                                                        toast.success('Link copied to clipboard');
+                                                    }}
+                                                    className="text-[10px] font-bold uppercase tracking-wider text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded"
+                                                    title="Copy Meeting Link"
+                                                >
+                                                    Copy Link
+                                                </button>
+                                            )}
+                                        </dt>
+                                        <dd className="font-medium text-gray-900 mt-1 truncate">
+                                            {meeting.meeting_link ? (
+                                                <a href={meeting.meeting_link.startsWith('http') ? meeting.meeting_link : `https://${meeting.meeting_link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                                    {meeting.meeting_link}
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400 italic font-normal">No link available</span>
+                                            )}
+                                        </dd>
                                     </div>
                                     <div>
                                         <dt className="text-gray-500 text-xs">Project ID</dt>
@@ -224,7 +288,7 @@ export default function ViewMeetingModal({
                                     </div>
                                     <div>
                                         <dt className="text-gray-500 text-xs">Created By</dt>
-                                        <dd className="font-medium text-gray-900 mt-1">{meeting.created_by}</dd>
+                                        <dd className="font-medium text-gray-900 mt-1 break-all" title={meeting.created_by}>{meeting.created_by}</dd>
                                     </div>
                                 </dl>
                             </div>
@@ -338,14 +402,14 @@ export default function ViewMeetingModal({
                                                             </div>
 
                                                             {/* AI Reasoning Expander (Simplified) */}
-                                                            {task.ai_reasoning && (
+                                                            {/* {task.ai_reasoning && !task.ai_reasoning.includes("No explicit status, defaulting to IN_PROGRESS") && (
                                                                 <details className="mt-3 text-xs">
                                                                     <summary className="cursor-pointer text-blue-600 hover:text-blue-700 font-medium select-none">Show AI Reasoning</summary>
                                                                     <div className="mt-2 p-3 bg-blue-50/50 rounded-lg text-gray-700 leading-relaxed border border-blue-100">
                                                                         {task.ai_reasoning}
                                                                     </div>
                                                                 </details>
-                                                            )}
+                                                            )} */}
                                                         </div>
                                                     </div>
 
@@ -412,9 +476,9 @@ export default function ViewMeetingModal({
                                                 </>
                                             ) : (
                                                 <>
-                                                    {meeting.meeting_transcript && (
+                                                    {meeting.transcript_content && (
                                                         <button
-                                                            onClick={() => navigator.clipboard.writeText(meeting.meeting_transcript || '')}
+                                                            onClick={() => navigator.clipboard.writeText(meeting.transcript_content || '')}
                                                             className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 font-medium flex items-center gap-1"
                                                         >
                                                             Copy
@@ -424,7 +488,7 @@ export default function ViewMeetingModal({
                                                         onClick={() => setIsEditing(true)}
                                                         className="text-sm text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"
                                                     >
-                                                        {meeting.meeting_transcript ? 'Edit Transcript' : 'Add Transcript'}
+                                                        {meeting.transcript_content ? 'Edit Transcript' : 'Add Transcript'}
                                                     </button>
                                                 </>
                                             )}
@@ -442,9 +506,9 @@ export default function ViewMeetingModal({
                                             />
                                         ) : (
                                             <>
-                                                {meeting.meeting_transcript ? (
+                                                {meeting.transcript_content ? (
                                                     <div className="prose max-w-none prose-slate prose-p:leading-relaxed">
-                                                        {meeting.meeting_transcript.split('\n').map((line, i) => (
+                                                        {meeting.transcript_content.split('\n').map((line, i) => (
                                                             <p key={i} className="mb-4 text-gray-700">
                                                                 {line}
                                                             </p>
@@ -536,13 +600,17 @@ export default function ViewMeetingModal({
                                                                             </div>
 
                                                                             {/* Status Badge */}
-                                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                                                task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                                                                    task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                                                        'bg-gray-50 text-gray-600 border-gray-100'
-                                                                                }`}>
-                                                                                {task.status.replace('_', ' ')}
-                                                                            </span>
+                                                                            {task.is_jira ? (
+                                                                                <JiraStatusBadge ticketId={task.id} />
+                                                                            ) : (
+                                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wide border ${task.status === 'done' ? 'bg-green-50 text-green-700 border-green-100' :
+                                                                                    task.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                                                        task.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                                                            'bg-gray-50 text-gray-600 border-gray-100'
+                                                                                    }`}>
+                                                                                    {task.status?.replace('_', ' ') || 'Unknown'}
+                                                                                </span>
+                                                                            )}
                                                                         </div>
 
                                                                         {/* Summary */}

@@ -20,6 +20,8 @@ export interface CreateReleaseNoteRequest {
     title: string;
     release_date?: string | null;
     release_type: 'MAJOR' | 'MINOR' | 'PATCH' | 'HOTFIX';
+    start_sprint?: number | null;
+    end_sprint?: number | null;
     content: ReleaseNoteContent;
     summary?: string | null;
 }
@@ -29,15 +31,19 @@ export interface UpdateReleaseNoteRequest {
     title?: string;
     release_date?: string | null;
     release_type?: 'MAJOR' | 'MINOR' | 'PATCH' | 'HOTFIX';
+    start_sprint?: number | null;
+    end_sprint?: number | null;
     content?: ReleaseNoteContent;
     summary?: string | null;
 }
 
 export interface GenerateReleaseNoteRequest {
     project_id: number;
-    version: string;
+    version?: string;
     include_tasks?: boolean;
     since_date?: string | null;
+    start_sprint?: number | null;
+    end_sprint?: number | null;
 }
 
 export interface ReleaseNote {
@@ -55,6 +61,21 @@ export interface ReleaseNote {
     updated_at: string;
     published_at: string | null;
     published_by: string | null;
+}
+
+export interface BacklogRelease {
+    id: string;
+    project_id: number;
+    sprint_id: number | null;
+    summary: string;
+    description: string | null;
+    issue_type: string;
+    status: string;
+    priority: string | null;
+    created_at: string;
+    updated_at: string;
+    start_date: string | null;
+    end_date: string | null;
 }
 
 export const releaseNotesApi = {
@@ -77,5 +98,14 @@ export const releaseNotesApi = {
         httpClient.post(`/release-notes/${id}/publish`),
 
     generateAI: (data: GenerateReleaseNoteRequest) =>
-        httpClient.post('/release-notes/generate', data)
+        httpClient.post('/release-notes/generate', data),
+
+    listBacklogReleases: (projectId: number) =>
+        httpClient.get(`/release-notes/backlog-releases/${projectId}`),
+
+    listAllBacklogReleases: () =>
+        httpClient.get('/release-notes/backlog-releases'),
+
+    getLatestVersion: (projectId: number): Promise<{ version: string | null }> =>
+        httpClient.get(`/release-notes/latest-version/${projectId}`),
 };
