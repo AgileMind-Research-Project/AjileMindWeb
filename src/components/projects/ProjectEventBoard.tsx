@@ -114,6 +114,9 @@ export default function ProjectEventBoard() {
         if (selectedCategory === 'Sprint Planning') {
             return sprints.filter(s => s.sprint_status.toLowerCase() === 'future');
         }
+        if (selectedCategory === 'Sprint Review') {
+            return sprints.filter(s => s.sprint_status.toLowerCase() === 'active');
+        }
         return sprints;
     }, [sprints, selectedCategory]);
 
@@ -123,6 +126,15 @@ export default function ProjectEventBoard() {
             const firstFuture = sprints.find(s => s.sprint_status.toLowerCase() === 'future');
             if (firstFuture) {
                 setSelectedSprintId(firstFuture.sprint_id);
+            } else {
+                setSelectedSprintId(null);
+            }
+        } else if (selectedCategory === 'Sprint Review') {
+            const firstActive = sprints.find(s => s.sprint_status.toLowerCase() === 'active');
+            if (firstActive) {
+                setSelectedSprintId(firstActive.sprint_id);
+            } else {
+                setSelectedSprintId(null);
             }
         }
     }, [selectedCategory, sprints]);
@@ -177,6 +189,20 @@ export default function ProjectEventBoard() {
 
     useEffect(() => {
         if (selectedProjectId && selectedSprintId && selectedCategory) {
+            // Ensure sprint is compatible with category
+            const currentSprint = sprints.find(s => s.sprint_id === selectedSprintId);
+            const isPlanning = selectedCategory === 'Sprint Planning';
+            const isReview = selectedCategory === 'Sprint Review';
+            const isFuture = currentSprint?.sprint_status.toLowerCase() === 'future';
+            const isActive = currentSprint?.sprint_status.toLowerCase() === 'active';
+
+            if ((isPlanning && !isFuture) || (isReview && !isActive)) {
+                setMeetings([]);
+                setSelectedMeetingId(null);
+                setTranscript(null);
+                return;
+            }
+
             const fetchMeetings = async () => {
                 setIsLoading(true);
                 setMeetings([]);
@@ -206,7 +232,7 @@ export default function ProjectEventBoard() {
             };
             fetchMeetings();
         }
-    }, [selectedProjectId, selectedSprintId, selectedCategory, fetchWithAuth]);
+    }, [selectedProjectId, selectedSprintId, selectedCategory, fetchWithAuth, sprints]);
 
     useEffect(() => {
         if (selectedMeetingId) {
@@ -332,7 +358,7 @@ export default function ProjectEventBoard() {
                                             sprint_status: updatedSprint?.sprint_status ?? 'Active',
                                             start_date: updatedSprint?.start_date ?? s.start_date,
                                             end_date: updatedSprint?.end_date ?? s.end_date,
-                                          }
+                                        }
                                         : s
                                 )
                             );
@@ -534,7 +560,14 @@ export default function ProjectEventBoard() {
                         {MEETING_CATEGORIES.map(cat => (
                             <button
                                 key={cat.id}
-                                onClick={() => setSelectedCategory(cat.id)}
+                                onClick={() => {
+                                    if (cat.id === 'Technical Design Meeting' || cat.id === 'Sprint Retrospective') {
+                                        const url = `http://localhost:3008/transcripts?project_id=${selectedProjectId}&category=${encodeURIComponent(cat.id)}`;
+                                        window.location.href = url;
+                                    } else {
+                                        setSelectedCategory(cat.id);
+                                    }
+                                }}
                                 className={`flex flex-col items-center justify-center p-8 rounded-2xl transition-all h-48 border-2 group
                   ${selectedCategory === cat.id
                                         ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-105'
@@ -553,15 +586,25 @@ export default function ProjectEventBoard() {
                                 <div className="flex items-center gap-4 flex-wrap">
                                     <div className="min-w-[200px]">
                                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sprint</label>
-                                        <select
-                                            className="w-full p-2 bg-white border border-gray-200 rounded shadow-sm outline-none"
-                                            value={selectedSprintId || ''}
-                                            onChange={(e) => setSelectedSprintId(parseInt(e.target.value))}
-                                        >
-                                            {visibleSprints.map(s => (
-                                                <option key={s.sprint_id} value={s.sprint_id}>{s.sprint_name} ({s.sprint_status})</option>
-                                            ))}
-                                        </select>
+                                        {visibleSprints.length > 0 ? (
+                                            <select
+                                                className="w-full p-2 bg-white border border-gray-200 rounded shadow-sm outline-none"
+                                                value={selectedSprintId || ''}
+                                                onChange={(e) => setSelectedSprintId(parseInt(e.target.value))}
+                                            >
+                                                {visibleSprints.map(s => (
+                                                    <option key={s.sprint_id} value={s.sprint_id}>{s.sprint_name} ({s.sprint_status})</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div className="p-2 bg-amber-50 border border-amber-200 text-amber-700 rounded text-xs font-medium italic">
+                                                {selectedCategory === 'Sprint Planning'
+                                                    ? 'No sprint planning event yet'
+                                                    : selectedCategory === 'Sprint Review'
+                                                        ? 'No sprint review event yet'
+                                                        : 'No sprints found'}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {meetings.length > 0 && (
@@ -582,9 +625,11 @@ export default function ProjectEventBoard() {
                                     ) || <p className="text-sm italic text-gray-400 mt-5">No meetings found for this sprint/category</p>}
                                 </div>
 
-                                <h2 className="text-xl font-bold text-blue-600 capitalize">
-                                    {MEETING_CATEGORIES.find(c => c.id === selectedCategory)?.label}
-                                </h2>
+                                <div className="flex items-center gap-4">
+                                    <h2 className="text-xl font-bold text-blue-600 capitalize">
+                                        {MEETING_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+                                    </h2>
+                                </div>
                             </div>
 
                             <div className="p-8">
@@ -603,17 +648,36 @@ export default function ProjectEventBoard() {
                                                 </div>
                                                 <h3 className="text-lg font-bold text-gray-800">Transcript for: {transcript.title}</h3>
                                             </div>
-                                            {/* Re-run Analysis button */}
-                                            <button
-                                                onClick={handleAnalyzeTranscript}
-                                                disabled={isAnalyzing}
-                                                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:bg-purple-300 flex items-center gap-2 shadow-sm transition-all"
-                                            >
-                                                {isAnalyzing ? (
-                                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                                ) : '✨'}
-                                                {isAnalyzing ? 'Analysing…' : 'Re-run Analysis'}
-                                            </button>
+
+                                            <div className="flex items-center gap-3">
+                                                {/* Generate Report button */}
+                                                <button
+                                                    onClick={() => {
+                                                        const url = `http://localhost:3008/transcripts?project_id=${selectedProjectId}&category=${encodeURIComponent(selectedCategory || '')}&autoOpen=true`;
+                                                        window.location.href = url;
+                                                    }}
+                                                    disabled={!extractedData || extractedData.tasks.length === 0}
+                                                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all ${!extractedData || extractedData.tasks.length === 0
+                                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
+                                                        }`}
+                                                    title={!extractedData || extractedData.tasks.length === 0 ? 'Wait for task analysis to complete' : 'Generate and view report'}
+                                                >
+                                                    <span>📊</span> Generate Report
+                                                </button>
+
+                                                {/* Re-run Analysis button */}
+                                                <button
+                                                    onClick={handleAnalyzeTranscript}
+                                                    disabled={isAnalyzing}
+                                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:bg-purple-300 flex items-center gap-2 shadow-sm transition-all"
+                                                >
+                                                    {isAnalyzing ? (
+                                                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                                    ) : '✨'}
+                                                    {isAnalyzing ? 'Analysing…' : 'Re-run Analysis'}
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* Transcript collapsible section — label + expand icon only by default */}
@@ -809,141 +873,140 @@ export default function ProjectEventBoard() {
                                                                                     {isExpanded && (() => {
                                                                                         const ts = taskEditStates[idx];
                                                                                         return (
-                                                                                        <div className="px-6 pb-5 pt-4 bg-blue-50 border-t border-blue-100 space-y-4">
-                                                                                            {isLoadingThis ? (
-                                                                                                <div className="flex items-center gap-2 py-4 justify-center">
-                                                                                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-200 border-t-blue-600"></div>
-                                                                                                    <span className="text-sm text-blue-600">Loading details…</span>
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                <>
-                                                                                                    {/* Description */}
-                                                                                                    <div>
-                                                                                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Description</p>
-                                                                                                        <p className="text-sm text-gray-700 leading-relaxed">
-                                                                                                            {detail?.description || task.description || <span className="italic text-gray-400">No description available.</span>}
-                                                                                                        </p>
+                                                                                            <div className="px-6 pb-5 pt-4 bg-blue-50 border-t border-blue-100 space-y-4">
+                                                                                                {isLoadingThis ? (
+                                                                                                    <div className="flex items-center gap-2 py-4 justify-center">
+                                                                                                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-200 border-t-blue-600"></div>
+                                                                                                        <span className="text-sm text-blue-600">Loading details…</span>
                                                                                                     </div>
+                                                                                                ) : (
+                                                                                                    <>
+                                                                                                        {/* Description */}
+                                                                                                        <div>
+                                                                                                            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Description</p>
+                                                                                                            <p className="text-sm text-gray-700 leading-relaxed">
+                                                                                                                {detail?.description || task.description || <span className="italic text-gray-400">No description available.</span>}
+                                                                                                            </p>
+                                                                                                        </div>
 
-                                                                                                    {/* Tags */}
-                                                                                                    {(() => {
-                                                                                                        const tags: string[] = detail?.tags ?? task.tags ?? [];
-                                                                                                        return tags.length > 0 ? (
-                                                                                                            <div>
-                                                                                                                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Tags</p>
-                                                                                                                <div className="flex flex-wrap gap-1.5">
-                                                                                                                    {tags.map((tag: string, ti: number) => (
-                                                                                                                        <span key={ti} className="text-[11px] bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{tag}</span>
-                                                                                                                    ))}
+                                                                                                        {/* Tags */}
+                                                                                                        {(() => {
+                                                                                                            const tags: string[] = detail?.tags ?? task.tags ?? [];
+                                                                                                            return tags.length > 0 ? (
+                                                                                                                <div>
+                                                                                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Tags</p>
+                                                                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                                                                        {tags.map((tag: string, ti: number) => (
+                                                                                                                            <span key={ti} className="text-[11px] bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{tag}</span>
+                                                                                                                        ))}
+                                                                                                                    </div>
                                                                                                                 </div>
+                                                                                                            ) : null;
+                                                                                                        })()}
+
+                                                                                                        {/* Status / Priority / Type row */}
+                                                                                                        {(detail?.status || detail?.priority || detail?.issue_type) && (
+                                                                                                            <div className="flex flex-wrap gap-4">
+                                                                                                                {detail?.status && (
+                                                                                                                    <div>
+                                                                                                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Status</p>
+                                                                                                                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{detail.status}</span>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                                {detail?.priority && (
+                                                                                                                    <div>
+                                                                                                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Priority</p>
+                                                                                                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${detail.priority === 'High' ? 'bg-red-100 text-red-700'
+                                                                                                                            : detail.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700'
+                                                                                                                                : 'bg-green-100 text-green-700'
+                                                                                                                            }`}>{detail.priority}</span>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                                {detail?.issue_type && (
+                                                                                                                    <div>
+                                                                                                                        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Type</p>
+                                                                                                                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">{detail.issue_type}</span>
+                                                                                                                    </div>
+                                                                                                                )}
                                                                                                             </div>
-                                                                                                        ) : null;
-                                                                                                    })()}
+                                                                                                        )}
 
-                                                                                                    {/* Status / Priority / Type row */}
-                                                                                                    {(detail?.status || detail?.priority || detail?.issue_type) && (
-                                                                                                        <div className="flex flex-wrap gap-4">
-                                                                                                            {detail?.status && (
-                                                                                                                <div>
-                                                                                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Status</p>
-                                                                                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{detail.status}</span>
-                                                                                                                </div>
-                                                                                                            )}
-                                                                                                            {detail?.priority && (
-                                                                                                                <div>
-                                                                                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Priority</p>
-                                                                                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                                                                                                        detail.priority === 'High' ? 'bg-red-100 text-red-700'
-                                                                                                                        : detail.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700'
-                                                                                                                        : 'bg-green-100 text-green-700'
-                                                                                                                    }`}>{detail.priority}</span>
-                                                                                                                </div>
-                                                                                                            )}
-                                                                                                            {detail?.issue_type && (
-                                                                                                                <div>
-                                                                                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Type</p>
-                                                                                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">{detail.issue_type}</span>
-                                                                                                                </div>
-                                                                                                            )}
-                                                                                                        </div>
-                                                                                                    )}
+                                                                                                        {/* ── Edit fields ── */}
+                                                                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-blue-200">
+                                                                                                            {/* Task ID */}
+                                                                                                            <div>
+                                                                                                                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Task ID</label>
+                                                                                                                <input
+                                                                                                                    type="text"
+                                                                                                                    value={ts?.editTaskId ?? task.task_id ?? ''}
+                                                                                                                    onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editTaskId: e.target.value } }))}
+                                                                                                                    placeholder="e.g. TAM-123"
+                                                                                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                                                                />
+                                                                                                            </div>
 
-                                                                                                    {/* ── Edit fields ── */}
-                                                                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-blue-200">
-                                                                                                        {/* Task ID */}
-                                                                                                        <div>
-                                                                                                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Task ID</label>
-                                                                                                            <input
-                                                                                                                type="text"
-                                                                                                                value={ts?.editTaskId ?? task.task_id ?? ''}
-                                                                                                                onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editTaskId: e.target.value } }))}
-                                                                                                                placeholder="e.g. TAM-123"
-                                                                                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                                                            />
-                                                                                                        </div>
-
-                                                                                                        {/* Estimated Hours */}
-                                                                                                        <div>
-                                                                                                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Estimated Hours</label>
-                                                                                                            <input
-                                                                                                                type="number"
-                                                                                                                min={0}
-                                                                                                                step={0.5}
-                                                                                                                value={ts?.editEffort ?? (task.effort != null ? String(task.effort) : '')}
-                                                                                                                onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editEffort: e.target.value } }))}
-                                                                                                                placeholder="e.g. 4"
-                                                                                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                                                            />
-                                                                                                        </div>
-
-                                                                                                        {/* Assignee */}
-                                                                                                        <div>
-                                                                                                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Assignee</label>
-                                                                                                            {ts?.usersLoaded ? (
-                                                                                                                <select
-                                                                                                                    value={ts.editAssignee}
-                                                                                                                    onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editAssignee: e.target.value } }))}
+                                                                                                            {/* Estimated Hours */}
+                                                                                                            <div>
+                                                                                                                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Estimated Hours</label>
+                                                                                                                <input
+                                                                                                                    type="number"
+                                                                                                                    min={0}
+                                                                                                                    step={0.5}
+                                                                                                                    value={ts?.editEffort ?? (task.effort != null ? String(task.effort) : '')}
+                                                                                                                    onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editEffort: e.target.value } }))}
+                                                                                                                    placeholder="e.g. 4"
                                                                                                                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                                                                >
-                                                                                                                    <option value="">— Unassigned —</option>
-                                                                                                                    {ts.users.map((u) => (
-                                                                                                                        <option key={u.user_id} value={u.email}>
-                                                                                                                            {u.first_name} {u.last_name} ({u.email})
-                                                                                                                        </option>
-                                                                                                                    ))}
-                                                                                                                    {ts.editAssignee && !ts.users.some(u => u.email === ts.editAssignee) && (
-                                                                                                                        <option value={ts.editAssignee}>{ts.editAssignee}</option>
-                                                                                                                    )}
-                                                                                                                </select>
-                                                                                                            ) : (
-                                                                                                                <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                                                                                                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-blue-500"></div>
-                                                                                                                    Loading members…
-                                                                                                                </div>
-                                                                                                            )}
-                                                                                                        </div>
-                                                                                                    </div>
+                                                                                                                />
+                                                                                                            </div>
 
-                                                                                                    {/* Save / Discard */}
-                                                                                                    <div className="flex justify-end gap-2">
-                                                                                                        <button
-                                                                                                            type="button"
-                                                                                                            onClick={() => discardTaskEdit(idx)}
-                                                                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
-                                                                                                        >
-                                                                                                            ✕ Discard
-                                                                                                        </button>
-                                                                                                        <button
-                                                                                                            type="button"
-                                                                                                            onClick={() => applyTaskEdit(idx)}
-                                                                                                            className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
-                                                                                                        >
-                                                                                                            ✓ Apply
-                                                                                                        </button>
-                                                                                                    </div>
-                                                                                                </>
-                                                                                            )}
-                                                                                        </div>
+                                                                                                            {/* Assignee */}
+                                                                                                            <div>
+                                                                                                                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Assignee</label>
+                                                                                                                {ts?.usersLoaded ? (
+                                                                                                                    <select
+                                                                                                                        value={ts.editAssignee}
+                                                                                                                        onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editAssignee: e.target.value } }))}
+                                                                                                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                                                                    >
+                                                                                                                        <option value="">— Unassigned —</option>
+                                                                                                                        {ts.users.map((u) => (
+                                                                                                                            <option key={u.user_id} value={u.email}>
+                                                                                                                                {u.first_name} {u.last_name} ({u.email})
+                                                                                                                            </option>
+                                                                                                                        ))}
+                                                                                                                        {ts.editAssignee && !ts.users.some(u => u.email === ts.editAssignee) && (
+                                                                                                                            <option value={ts.editAssignee}>{ts.editAssignee}</option>
+                                                                                                                        )}
+                                                                                                                    </select>
+                                                                                                                ) : (
+                                                                                                                    <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                                                                                                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-blue-500"></div>
+                                                                                                                        Loading members…
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        </div>
+
+                                                                                                        {/* Save / Discard */}
+                                                                                                        <div className="flex justify-end gap-2">
+                                                                                                            <button
+                                                                                                                type="button"
+                                                                                                                onClick={() => discardTaskEdit(idx)}
+                                                                                                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
+                                                                                                            >
+                                                                                                                ✕ Discard
+                                                                                                            </button>
+                                                                                                            <button
+                                                                                                                type="button"
+                                                                                                                onClick={() => applyTaskEdit(idx)}
+                                                                                                                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold"
+                                                                                                            >
+                                                                                                                ✓ Apply
+                                                                                                            </button>
+                                                                                                        </div>
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
                                                                                         );
                                                                                     })()}
                                                                                 </div>

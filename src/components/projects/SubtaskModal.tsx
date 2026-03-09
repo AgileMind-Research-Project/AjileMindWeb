@@ -42,6 +42,10 @@ export default function SubtaskModal({
     const [items, setItems] = useState<BacklogItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+    const [sprintId, setSprintId] = useState<number | null>(null);
+    const [automationApproval, setAutomationApproval] = useState<any>(null);
+
+    const splitLocked = !!automationApproval?.split_tasks;
 
     // Editing state
     const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
@@ -73,9 +77,55 @@ export default function SubtaskModal({
         tags: ''
     });
 
+    const fetchAutomationApproval = async (sid: number) => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const res = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sid}/automation-approval`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setAutomationApproval(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching automation approval:', error);
+        }
+    };
+
+    const fetchSprints = async () => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const res = await fetch(
+                `${apiUrl}/api/v1/projects/${projectId}/sprints`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && data.data.sprints.length > 0) {
+                    const sprints = data.data.sprints;
+                    const activeSprint = sprints.find((s: any) => s.sprint_status === 'Active') || sprints[0];
+                    setSprintId(activeSprint.sprint_id);
+                    fetchAutomationApproval(activeSprint.sprint_id);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching sprints:', error);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
             fetchBacklog();
+            fetchSprints();
             setSelectedSubtasks(new Set());
             setMergingSubtasks([]);
             setEditingSubtask(null);
@@ -108,7 +158,7 @@ export default function SubtaskModal({
                     const flatItems: BacklogItem[] = [];
                     fetchedGroups.forEach((group) => {
                         // Synthetic parent task entry (needed for accordion headers)
-                        
+
                         // Actual subtask entries
                         group.subtasks.forEach((s) => flatItems.push(s));
                     });
@@ -405,8 +455,22 @@ export default function SubtaskModal({
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button onClick={() => handleEditClick(subtask)} className="text-gray-400 hover:text-blue-600"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
-                                        <button onClick={(e) => handleDeleteSubtask(subtask.id)} className="text-gray-400 hover:text-red-500"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                                        <button
+                                            onClick={() => !splitLocked && handleEditClick(subtask)}
+                                            disabled={splitLocked}
+                                            className={`transition-colors ${splitLocked ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-blue-600'}`}
+                                            title={splitLocked ? 'Auto-splitting approved - manual changes locked' : ''}
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                        </button>
+                                        <button
+                                            onClick={(e) => !splitLocked && handleDeleteSubtask(subtask.id)}
+                                            disabled={splitLocked}
+                                            className={`transition-colors ${splitLocked ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-red-500'}`}
+                                            title={splitLocked ? 'Auto-splitting approved - deletion locked' : ''}
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
                                     </div>
                                 </div>
                                 {renderSubtasksForParent(subtask.id, depth + 1)}
@@ -416,7 +480,14 @@ export default function SubtaskModal({
                                         <div className="flex justify-end gap-2"><button onClick={() => setAddingToTask(null)} className="text-xs">Cancel</button><button onClick={handleCreateSubtask} className="text-xs bg-blue-600 text-white px-2 py-1 rounded">Add</button></div>
                                     </div>
                                 ) : (
-                                    <button onClick={() => handleAddSubtaskClick(subtask.id)} className="mt-2 text-[10px] text-blue-500 hover:underline">+ Add Nested Subtask</button>
+                                    <button
+                                        onClick={() => !splitLocked && handleAddSubtaskClick(subtask.id)}
+                                        disabled={splitLocked}
+                                        className={`mt-2 text-[10px] transition-all ${splitLocked ? 'text-gray-400 cursor-not-allowed italic' : 'text-blue-500 hover:underline hover:text-blue-700'}`}
+                                        title={splitLocked ? 'Auto-splitting approved - manual nesting locked' : ''}
+                                    >
+                                        + Add Nested Subtask
+                                    </button>
                                 )}
                             </div>
                         )}
@@ -460,6 +531,42 @@ export default function SubtaskModal({
             case 'medium': return 'text-yellow-600';
             case 'low': return 'text-green-600';
             default: return 'text-gray-600';
+        }
+    };
+
+    const handleApprove = async (field: 'split_tasks', status: boolean) => {
+        if (!sprintId) {
+            ToastService.showError('No active sprint found');
+            return;
+        }
+
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+            const response = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sprintId}/automation-approval/approve`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        [field]: status
+                    })
+                }
+            );
+
+            if (response.ok) {
+                ToastService.showSuccess(status === false ? 'Approval revoked' : 'Automation approved successfully');
+                fetchAutomationApproval(sprintId);
+            } else {
+                throw new Error('Failed to update approval');
+            }
+        } catch (error) {
+            console.error('Error updating approval:', error);
+            ToastService.showError('Failed to update automation approval');
         }
     };
 
@@ -558,9 +665,11 @@ export default function SubtaskModal({
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleMergeClick();
+                                                                if (!splitLocked) handleMergeClick();
                                                             }}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-all"
+                                                            disabled={splitLocked}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg shadow-sm transition-all ${splitLocked ? 'bg-gray-400 cursor-not-allowed opacity-60' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                                            title={splitLocked ? 'Auto-splitting approved - merge locked' : ''}
                                                         >
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -583,9 +692,6 @@ export default function SubtaskModal({
                                                             }`}>
                                                             {task.status.replace('_', ' ').toUpperCase()}
                                                         </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 min-w-[150px] truncate" title={task.assignee || 'Unassigned'}>
-                                                        <span>👤 {task.assignee || 'Unassigned'}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -627,7 +733,7 @@ export default function SubtaskModal({
                                                                     value={newSubtaskForm.description}
                                                                     onChange={e => setNewSubtaskForm({ ...newSubtaskForm, description: e.target.value })}
                                                                 />
-                                                                <div className="grid grid-cols-2 gap-4">
+                                                                <div className="grid grid-cols-1 gap-4">
                                                                     <select
                                                                         className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2.5 border text-gray-900 shadow-sm"
                                                                         value={newSubtaskForm.priority}
@@ -638,13 +744,6 @@ export default function SubtaskModal({
                                                                         <option value="medium">Medium</option>
                                                                         <option value="low">Low</option>
                                                                     </select>
-                                                                    <input
-                                                                        type="text"
-                                                                        placeholder="Assignee (Optional)"
-                                                                        className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 p-2.5 border text-gray-900 shadow-sm"
-                                                                        value={newSubtaskForm.assignee}
-                                                                        onChange={e => setNewSubtaskForm({ ...newSubtaskForm, assignee: e.target.value })}
-                                                                    />
                                                                 </div>
                                                                 <div className="flex justify-end gap-3 pt-2">
                                                                     <button onClick={() => setAddingToTask(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors">Cancel</button>
@@ -654,11 +753,19 @@ export default function SubtaskModal({
                                                         </div>
                                                     ) : (
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); handleAddSubtaskClick(task.id); }}
-                                                            className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800 transition-all w-full justify-center border-2 border-dashed border-blue-200 py-3 rounded-lg hover:bg-blue-50 hover:border-blue-300"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (!splitLocked) handleAddSubtaskClick(task.id);
+                                                            }}
+                                                            disabled={splitLocked}
+                                                            className={`flex items-center gap-2 text-sm font-semibold transition-all w-full justify-center border-2 border-dashed py-3 rounded-lg ${splitLocked
+                                                                ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50'
+                                                                : 'text-blue-600 border-blue-200 hover:text-blue-800 hover:bg-blue-50 hover:border-blue-300'
+                                                                }`}
+                                                            title={splitLocked ? 'Auto-splitting approved - manual creation locked' : ''}
                                                         >
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                                                            Create New Subtask
+                                                            {splitLocked ? 'Auto-Splitting Approved' : 'Create New Subtask'}
                                                         </button>
                                                     )}
                                                 </div>
@@ -668,6 +775,40 @@ export default function SubtaskModal({
                                 })}
                             </div>
                         )}
+                    </div>
+
+                    {/* Footer Added for Approval */}
+                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-white rounded-b-xl">
+                        <div className="flex gap-4">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Split Automation</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                    {splitLocked ? (
+                                        <button
+                                            onClick={() => handleApprove('split_tasks', false)}
+                                            className="px-3 py-1 text-xs font-semibold text-gray-700 bg-yellow-100 border border-yellow-300 rounded hover:bg-yellow-200 transition-colors flex items-center gap-1.5"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            Change Split
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleApprove('split_tasks', true)}
+                                            className="px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1.5"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                            Approve Split
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-2 text-sm font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-all shadow-sm"
+                        >
+                            Close
+                        </button>
                     </div>
                 </div>
             </div>

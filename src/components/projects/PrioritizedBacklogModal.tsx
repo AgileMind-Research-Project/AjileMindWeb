@@ -35,12 +35,12 @@ export default function PrioritizedBacklogModal({
     const [hasChanges, setHasChanges] = useState(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState<'prioritized' | 'available'>('prioritized');
+    const [sprintId, setSprintId] = useState<number | null>(null);
+    const [automationApproval, setAutomationApproval] = useState<any>(null);
 
-    useEffect(() => {
-        if (isOpen) {
-            fetchBothLists();
-        }
-    }, [isOpen, projectId]);
+    const isLocked = !!automationApproval?.backlog_prioritize;
+    const canChangeApproval = isLocked && !automationApproval?.split_tasks && !automationApproval?.assign_tasks;
+
 
     const fetchBothLists = async () => {
         setLoading(true);
@@ -91,7 +91,62 @@ export default function PrioritizedBacklogModal({
         }
     };
 
+    const fetchAutomationApproval = async (sid: number) => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const res = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sid}/automation-approval`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setAutomationApproval(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching automation approval:', error);
+        }
+    };
+
+    const fetchSprints = async () => {
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const res = await fetch(
+                `${apiUrl}/api/v1/projects/${projectId}/sprints`,
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && data.data.sprints.length > 0) {
+                    // Find active sprint or latest
+                    const sprints = data.data.sprints;
+                    const activeSprint = sprints.find((s: any) => s.sprint_status === 'Active') || sprints[0];
+                    setSprintId(activeSprint.sprint_id);
+                    fetchAutomationApproval(activeSprint.sprint_id);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching sprints:', error);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            fetchBothLists();
+            fetchSprints();
+            setHasChanges(false); // Reset changes on open
+        }
+    }, [isOpen, projectId]);
+
     const handleDragStart = (e: React.DragEvent, index: number) => {
+        if (isLocked) return;
         setDraggedIndex(index);
         e.dataTransfer.effectAllowed = 'move';
     };
@@ -148,6 +203,7 @@ export default function PrioritizedBacklogModal({
             if (response.ok) {
                 ToastService.showSuccess('Item added to priority list');
                 fetchBothLists();
+                // setHasChanges(true); // Removed: Add persists to DB immediately
             } else {
                 throw new Error('Failed to add item');
             }
@@ -176,7 +232,7 @@ export default function PrioritizedBacklogModal({
             if (response.ok) {
                 ToastService.showSuccess('Item removed from priority list');
                 fetchBothLists();
-                setHasChanges(false);
+                // setHasChanges(true); // Removed: Remove persists to DB immediately
             } else {
                 throw new Error('Failed to remove item');
             }
@@ -245,6 +301,45 @@ export default function PrioritizedBacklogModal({
         }
     };
 
+    const handleApprove = async (status: boolean = true) => {
+        if (!sprintId) {
+            ToastService.showError('No active sprint found to approve');
+            return;
+        }
+
+        try {
+            const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+            const response = await fetch(
+                `${apiUrl}/api/v1/backlog-priority/projects/${projectId}/sprints/${sprintId}/automation-approval/approve`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        backlog_prioritize: typeof status === 'boolean' ? status : true
+                    })
+                }
+            );
+
+            if (response.ok) {
+                ToastService.showSuccess(status === false ? 'Approval revoked' : 'Automation approved successfully');
+                fetchAutomationApproval(sprintId);
+                if (status === false) {
+                    setHasChanges(false);
+                }
+            } else {
+                throw new Error('Failed to approve');
+            }
+        } catch (error) {
+            console.error('Error approving:', error);
+            ToastService.showError('Failed to approve automation');
+        }
+    };
+
     const getIssueTypeColor = (type: string) => {
         switch (type.toLowerCase()) {
             case 'bug': return 'bg-red-100 text-red-800';
@@ -267,8 +362,8 @@ export default function PrioritizedBacklogModal({
     const renderItem = (item: BacklogItem, index?: number, isPrioritized: boolean = false) => (
         <div
             key={item.backlog_id}
-            draggable={isPrioritized}
-            onDragStart={isPrioritized ? (e) => handleDragStart(e, index!) : undefined}
+            draggable={isPrioritized && !isLocked}
+            onDragStart={isPrioritized && !isLocked ? (e) => handleDragStart(e, index!) : undefined}
             onDragOver={isPrioritized ? handleDragOver : undefined}
             onDrop={isPrioritized ? (e) => handleDrop(e, index!) : undefined}
             onDragEnd={isPrioritized ? handleDragEnd : undefined}
@@ -314,17 +409,19 @@ export default function PrioritizedBacklogModal({
                 <div className="flex-shrink-0">
                     {isPrioritized ? (
                         <button
-                            onClick={() => handleRemoveFromPriority(item.backlog_id)}
-                            className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-600 rounded hover:bg-red-50 transition-colors"
-                            title="Remove from priority"
+                            onClick={() => !isLocked && handleRemoveFromPriority(item.backlog_id)}
+                            disabled={isLocked}
+                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isLocked ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-red-600 border-red-600 hover:bg-red-50'}`}
+                            title={isLocked ? "Approval active - cannot remove" : "Remove from priority"}
                         >
                             Remove
                         </button>
                     ) : (
                         <button
-                            onClick={() => handleAddToPriority(item.backlog_id)}
-                            className="px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-600 rounded hover:bg-blue-50 transition-colors"
-                            title="Add to priority"
+                            onClick={() => !isLocked && handleAddToPriority(item.backlog_id)}
+                            disabled={isLocked}
+                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isLocked ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-blue-600 border-blue-600 hover:bg-blue-50'}`}
+                            title={isLocked ? "Approval active - cannot add" : "Add to priority"}
                         >
                             Add
                         </button>
@@ -405,7 +502,9 @@ export default function PrioritizedBacklogModal({
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <p className="text-sm text-blue-600 mb-4">💡 Drag and drop items to reorder priority</p>
+                                    <p className="text-sm text-blue-600 mb-4">
+                                        {isLocked ? '🔒 Backlog is approved and locked. Revoke approval to make changes.' : '💡 Drag and drop items to reorder priority'}
+                                    </p>
                                     {prioritizedItems.map((item, index) => renderItem(item, index, true))}
                                 </div>
                             )
@@ -435,6 +534,31 @@ export default function PrioritizedBacklogModal({
                             )}
                         </div>
                         <div className="flex gap-3">
+                            {activeTab === 'prioritized' && automationApproval && (
+                                !automationApproval.backlog_prioritize ? (
+                                    <button
+                                        onClick={() => handleApprove(true)}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Approve
+                                    </button>
+                                ) : (
+                                    canChangeApproval && (
+                                        <button
+                                            onClick={() => handleApprove(false)}
+                                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-yellow-100 border border-yellow-300 rounded-md hover:bg-yellow-200 transition-colors shadow-sm flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                            Change
+                                        </button>
+                                    )
+                                )
+                            )}
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
@@ -444,7 +568,7 @@ export default function PrioritizedBacklogModal({
                             {activeTab === 'prioritized' && (
                                 <button
                                     onClick={handleConfirm}
-                                    disabled={saving}
+                                    disabled={saving || !hasChanges || isLocked}
                                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
                                     {saving ? 'Processing...' : 'Confirm'}
