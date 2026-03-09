@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { notificationsApi, DowntimeType, Priority, Audience, DowntimeNotificationRequest } from '@/lib/api/notifications.api';
 import { projectsApi, Project } from '@/lib/api/projects.api';
 import { meetingsApi } from '@/lib/api/meetings.api';
+import { releaseNotesApi, BacklogRelease } from '@/lib/api/release-notes.api';
 import { toast } from 'sonner';
 
 export default function DownTimeSender() {
@@ -16,6 +17,8 @@ export default function DownTimeSender() {
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [selectedNotification, setSelectedNotification] = useState<any>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [backlogReleases, setBacklogReleases] = useState<BacklogRelease[]>([]);
+    const [loadingBacklog, setLoadingBacklog] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState<DowntimeNotificationRequest>({
@@ -80,6 +83,23 @@ export default function DownTimeSender() {
         }
     }, [activeTab]);
 
+    // Load Planned Releases (Backlog)
+    const loadBacklogReleases = async () => {
+        setLoadingBacklog(true);
+        try {
+            const response = await releaseNotesApi.listAllBacklogReleases();
+            setBacklogReleases(Array.isArray(response) ? response : []);
+        } catch (error) {
+            console.error('Failed to load backlog releases:', error);
+        } finally {
+            setLoadingBacklog(false);
+        }
+    };
+
+    useEffect(() => {
+        loadBacklogReleases();
+    }, []);
+
     // Load Project Members when Project Selected
     useEffect(() => {
         if (formData.project_id) {
@@ -88,6 +108,8 @@ export default function DownTimeSender() {
                 try {
                     const members = await meetingsApi.getProjectUsers(formData.project_id!);
                     setProjectMembers(members);
+                    // Select ALL by default
+                    setSelectedEmails(members.map((m: any) => m.email));
                 } catch (error) {
                     console.error('Failed to load members:', error);
                     toast.error('Failed to load project members');
@@ -98,6 +120,7 @@ export default function DownTimeSender() {
             fetchMembers();
         } else {
             setProjectMembers([]);
+            setSelectedEmails([]);
         }
     }, [formData.project_id]);
 
@@ -109,6 +132,24 @@ export default function DownTimeSender() {
             : [...current, component];
         setFormData({ ...formData, affected_components: updated });
     };
+
+    // State for manual recipient selection
+    const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
+
+    const toggleRecipient = (email: string) => {
+        setSelectedEmails(prev =>
+            prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
+        );
+    };
+
+    const toggleAllRecipients = () => {
+        if (selectedEmails.length === projectMembers.length) {
+            setSelectedEmails([]);
+        } else {
+            setSelectedEmails(projectMembers.map(m => m.email));
+        }
+    };
+
 
     // Auto-update subject based on type
     const handleTypeChange = (type: DowntimeType) => {
@@ -137,6 +178,16 @@ export default function DownTimeSender() {
         });
     };
 
+    // Helper to format date for datetime-local
+    const formatDateTimeLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     const handleSendScheduled = async (notificationId: number) => {
         if (!confirm('Send this scheduled notification now?')) return;
 
@@ -159,21 +210,22 @@ export default function DownTimeSender() {
             toast.error('Please select both start and end times');
             return;
         }
-        if (formData.affected_components.length === 0) {
-            toast.error('Please select at least one affected component');
-            return;
-        }
 
         // Validate scheduling if not immediate
-        // Note: isImmediate might be the event object if called directly from onClick without args, so check type
         const immediate = typeof isImmediate === 'boolean' ? isImmediate : false;
 
-        if (!immediate) {
+        const payload = {
+            ...formData,
+            target_emails: selectedEmails.length > 0 ? selectedEmails : undefined
+        };
+
+        if (immediate) {
+            delete (payload as any).scheduled_at;
+        } else {
             if (!formData.scheduled_at) {
                 toast.error('Please select a "Schedule Send Time" to schedule.');
                 return;
             }
-
             if (new Date(formData.scheduled_at) >= new Date(formData.schedule.start_time)) {
                 toast.error('Schedule Send Time must be earlier than the maintenance Start Time.');
                 return;
@@ -184,42 +236,28 @@ export default function DownTimeSender() {
         setStatusMessage(immediate ? 'Initializing...' : 'Scheduling notification...');
 
         try {
-            console.log("DEBUG: Preparing to send. Audience:", formData.audience, "Project:", formData.project_id, "Members:", projectMembers);
+            const recipientsToSend = selectedEmails.length > 0 ? projectMembers.filter(m => selectedEmails.includes(m.email)) : projectMembers;
 
-            // Only show sending animation for immediate sends
             if (immediate) {
-                // Simulate sending animation if we have members visible
-                if (projectMembers.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
-                    for (const member of projectMembers) {
-                        setStatusMessage(`Sending to mail (${member.first_name} ${member.last_name})...`);
-                        // Artificial delay for the effect
-                        await new Promise(resolve => setTimeout(resolve, 150));
+                if (recipientsToSend.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
+                    for (const member of recipientsToSend) {
+                        setStatusMessage(`Sending to ${member.first_name} ${member.last_name}...`);
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } else {
                     setStatusMessage('Sending notification...');
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
-            } else {
-                // For scheduled notifications, just show a brief delay
-                await new Promise(resolve => setTimeout(resolve, 300));
             }
 
-            const payload = { ...formData };
-            if (immediate) {
-                delete payload.scheduled_at; // Ensure we don't send a schedule time for immediate sending
-            }
-
-            const response = await notificationsApi.sendDowntimeNotification(payload);
+            const response = await notificationsApi.sendDowntimeNotification(payload as any);
             if (response.success) {
                 toast.success(immediate ? response.message : "Scheduled set successfully");
                 if (activeTab === 'history') {
                     loadHistory();
                 } else {
                     toast('Notification sent/scheduled', {
-                        action: {
-                            label: 'View History',
-                            onClick: () => setActiveTab('history')
-                        }
+                        action: { label: 'View History', onClick: () => setActiveTab('history') }
                     });
                 }
             }
@@ -256,8 +294,129 @@ export default function DownTimeSender() {
 
     const theme = getPreviewTheme();
 
+    // Auto-fill downtime form from a backlog release item
+    const handleCreateFromBacklog = (item: BacklogRelease) => {
+        const project = projects.find(p => p.project_id === item.project_id);
+        const projectName = project?.project_name || `Project ${item.project_id}`;
+
+        setFormData({
+            ...formData,
+            type: DowntimeType.PLANNED_MAINTENANCE,
+            priority: Priority.HIGH,
+            project_id: item.project_id,
+            audience: Audience.PROJECT_MEMBERS,
+            content: {
+                subject: `Scheduled Maintenance: ${projectName} - ${item.summary}`,
+                message_body: `We will be performing scheduled maintenance for "${item.summary}" on the ${projectName} project.\n\n${item.description || 'Please plan accordingly.'}`,
+            },
+            schedule: {
+                start_time: item.end_date
+                    ? formatDateTimeLocal(new Date(new Date(item.end_date).getTime() - 30 * 60000))
+                    : (item.start_date ? formatDateTimeLocal(new Date(item.start_date)) : ''),
+                end_time: item.end_date ? formatDateTimeLocal(new Date(item.end_date)) : '',
+                timezone: 'UTC',
+            },
+            scheduled_at: item.end_date
+                ? formatDateTimeLocal(new Date(new Date(item.end_date).getTime() - 60 * 60000))
+                : '',
+        });
+
+        setActiveTab('send');
+        toast.success(`📋 Form auto-filled from: ${item.summary}`);
+    };
+
     return (
         <div className="flex flex-col h-full space-y-3">
+            {/* Planned Releases (Backlog) Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                        <span className="w-5 h-5 bg-indigo-100 text-indigo-600 rounded flex items-center justify-center text-xs">📅</span>
+                        Planned Releases (Backlog)
+                        <span className="text-xs text-gray-400 font-normal ml-1">({backlogReleases.length})</span>
+                    </h2>
+                    <button
+                        onClick={loadBacklogReleases}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 border border-blue-100 px-2 py-1 rounded"
+                    >
+                        Refresh 🔄
+                    </button>
+                </div>
+                <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                        <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
+                            <tr>
+                                <th className="px-3 py-2 font-bold">Project</th>
+                                <th className="px-3 py-2 font-bold">Key</th>
+                                <th className="px-3 py-2 font-bold text-center">Sprint</th>
+                                <th className="px-3 py-2 font-bold">Summary</th>
+                                <th className="px-3 py-2 font-bold">Target Date</th>
+                                <th className="px-3 py-2 font-bold">Status</th>
+                                <th className="px-3 py-2 font-bold">Priority</th>
+                                <th className="px-3 py-2 font-bold text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {loadingBacklog ? (
+                                <tr><td colSpan={8} className="py-6 text-center text-gray-400 text-sm">Loading planned releases...</td></tr>
+                            ) : backlogReleases.length === 0 ? (
+                                <tr><td colSpan={8} className="py-6 text-center text-gray-400 text-sm">No planned releases found in backlog.</td></tr>
+                            ) : (
+                                backlogReleases.map(item => (
+                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-3 py-2">
+                                            <span className="text-xs text-gray-600">
+                                                {projects.find(p => p.project_id === item.project_id)?.project_name || `Project ${item.project_id}`}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                                {item.id}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            <span className="text-xs font-bold text-gray-600">
+                                                {item.sprint_id ? `S${item.sprint_id}` : '—'}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <div className="text-sm text-gray-900 font-medium">{item.summary}</div>
+                                            <div className="text-xs text-gray-500 truncate max-w-[200px]">{item.description || 'No description'}</div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <div className="text-xs text-gray-600">
+                                                {item.end_date ? new Date(item.end_date).toLocaleDateString() : 'TBD'}
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className={`text-xs px-1.5 py-0.5 rounded ${item.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                {item.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className={`text-xs px-1.5 py-0.5 rounded ${item.priority === 'high' || item.priority === 'highest' ? 'bg-red-100 text-red-700' :
+                                                item.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                {item.priority || '—'}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            <button
+                                                onClick={() => handleCreateFromBacklog(item)}
+                                                className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs rounded hover:from-purple-700 hover:to-blue-700 transition-all whitespace-nowrap font-medium"
+                                            >
+                                                📢 Create Downtime
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {/* Tabs */}
             <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
                 <button
@@ -283,20 +442,21 @@ export default function DownTimeSender() {
             {activeTab === 'send' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
                     {/* LEFT SIDE: FORM */}
-                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto">
-                        <h2 className="text-base font-bold text-gray-900 mb-2 flex items-center gap-2">
-                            <span className="text-lg">📢</span> DownTime Sender
+                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-3 overflow-y-auto">
+                        <h2 className="text-sm font-bold text-gray-900 mb-1.5 flex items-center gap-2">
+                            <span className="text-base">📢</span> DownTime Sender
                         </h2>
 
-                        <div className="space-y-2">
-                            {/* Type & Priority */}
-                            <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                            {/* Grid Configuration: 3 Columns for primary inputs */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* Row 1: Type, Priority, Audience */}
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Downtime Type</label>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Downtime Type</label>
                                     <select
                                         value={formData.type}
                                         onChange={(e) => handleTypeChange(e.target.value as DowntimeType)}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     >
                                         {Object.values(DowntimeType).map(t => (
                                             <option key={t} value={t}>{t.replace('_', ' ')}</option>
@@ -304,157 +464,24 @@ export default function DownTimeSender() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Priority</label>
                                     <select
                                         value={formData.priority}
                                         onChange={(e) => setFormData({ ...formData, priority: e.target.value as Priority })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     >
                                         {Object.values(Priority).map(p => (
                                             <option key={p} value={p}>{p}</option>
                                         ))}
                                     </select>
                                 </div>
-                            </div>
-
-                            {/* Affected Services */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Affected Services</label>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {COMPONENTS.map(comp => (
-                                        <button
-                                            key={comp}
-                                            type="button"
-                                            onClick={() => toggleComponent(comp)}
-                                            className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-colors
-                                                ${formData.affected_components.includes(comp)
-                                                    ? 'bg-blue-600 text-white border-blue-600'
-                                                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
-                                        >
-                                            {comp}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Duration */}
-                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Start Time</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={formData.schedule.start_time}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            schedule: { ...formData.schedule, start_time: e.target.value }
-                                        })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Estimated End Time</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={formData.schedule.end_time}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            schedule: { ...formData.schedule, end_time: e.target.value }
-                                        })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Project Selection */}
-                            <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">Affected Project (Optional)</label>
-                                <select
-                                    value={formData.project_id || ''}
-                                    onChange={(e) => {
-                                        const pid = e.target.value ? Number(e.target.value) : null;
-
-                                        // Update content with project name if applicable
-                                        let newContent = { ...formData.content };
-                                        if (pid) {
-                                            const project = projects.find(p => p.project_id === pid);
-                                            if (project) {
-                                                if (formData.type === DowntimeType.PLANNED_MAINTENANCE) {
-                                                    newContent.subject = `Scheduled Maintenance: ${project.project_name}`;
-                                                    newContent.message_body = `We will be performing scheduled maintenance on the ${project.project_name} to improve performance and security.`;
-                                                } else if (formData.type === DowntimeType.EMERGENCY_OUTAGE) {
-                                                    newContent.subject = `Urgent: Service Disruption - ${project.project_name}`;
-                                                    newContent.message_body = `We are currently experiencing an unexpected issue with ${project.project_name}. Our engineering team is actively investigating the root cause.`;
-                                                }
-                                            }
-                                        }
-
-                                        setFormData({
-                                            ...formData,
-                                            project_id: pid,
-                                            content: newContent,
-                                            // Auto-select audience if project selected
-                                            audience: pid ? Audience.PROJECT_MEMBERS : formData.audience
-                                        });
-                                    }}
-                                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-2 text-sm"
-                                >
-                                    <option value="">Select a Project...</option>
-                                    {projects.map(p => (
-                                        <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
-                                    ))}
-                                </select>
-
-                                {/* Show Members */}
-                                {formData.project_id && (
-                                    <div>
-                                        <p className="text-xs font-semibold text-gray-500 mb-2">
-                                            Project Members ({projectMembers.length})
-                                            {fetchingMembers && <span className="ml-2 font-normal animate-pulse">Loading...</span>}
-                                        </p>
-                                        <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-                                            {projectMembers.map((member: any) => {
-                                                const isSelected = formData.audience === Audience.PROJECT_MEMBERS &&
-                                                    (!formData.target_roles || formData.target_roles.length === 0 || formData.target_roles.includes(member.role));
-
-                                                return (
-                                                    <div key={member.user_id || member.email}
-                                                        className={`flex items-center text-xs border rounded-md p-2 transition-colors ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'}`}
-                                                    >
-                                                        <div className={`w-4 h-4 mr-3 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
-                                                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                                                        </div>
-                                                        <div className="flex items-center flex-1 min-w-0 gap-2">
-                                                            <span className="font-medium text-gray-800 whitespace-nowrap">
-                                                                {member.first_name} {member.last_name}
-                                                            </span>
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-100 text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                                                                {member.role}
-                                                            </span>
-                                                            <span className="text-gray-400 text-[10px] truncate">
-                                                                {member.email}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                            {!fetchingMembers && projectMembers.length === 0 && (
-                                                <span className="text-xs text-gray-400 italic top-1">No members found.</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                {/* Target Audience */}
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Target Audience</label>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Target Audience</label>
                                     <select
                                         value={formData.target_roles && formData.target_roles.length > 0 ? formData.target_roles[0] : formData.audience}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (formData.project_id) {
-                                                // If filtering by role
                                                 if (availableRoles.includes(val)) {
                                                     setFormData({
                                                         ...formData,
@@ -462,7 +489,6 @@ export default function DownTimeSender() {
                                                         target_roles: [val]
                                                     });
                                                 } else {
-                                                    // All Project Members
                                                     setFormData({
                                                         ...formData,
                                                         audience: Audience.PROJECT_MEMBERS,
@@ -470,11 +496,10 @@ export default function DownTimeSender() {
                                                     });
                                                 }
                                             } else {
-                                                // Standard Audience Selection
                                                 setFormData({ ...formData, audience: val as Audience, target_roles: [] });
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     >
                                         {formData.project_id ? (
                                             <>
@@ -491,87 +516,243 @@ export default function DownTimeSender() {
                                     </select>
                                 </div>
 
-                                {/* Subject Line */}
+                                {/* Row 2: Timing Configuration */}
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Subject Line</label>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Start Time</label>
                                     <input
-                                        type="text"
-                                        value={formData.content.subject}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            content: { ...formData.content, subject: e.target.value }
-                                        })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                        placeholder="Email Subject"
+                                        type="datetime-local"
+                                        value={formData.schedule.start_time}
+                                        onChange={(e) => {
+                                            const startTimeVal = e.target.value;
+                                            let autoScheduleTime = formData.scheduled_at;
+
+                                            if (startTimeVal) {
+                                                const startDate = new Date(startTimeVal);
+                                                if (!isNaN(startDate.getTime())) {
+                                                    // Set Schedule Send Time to 30 mins before Start Time
+                                                    const scheduleDate = new Date(startDate.getTime() - 30 * 60000);
+                                                    autoScheduleTime = formatDateTimeLocal(scheduleDate);
+                                                }
+                                            }
+
+                                            setFormData({
+                                                ...formData,
+                                                schedule: { ...formData.schedule, start_time: startTimeVal },
+                                                scheduled_at: autoScheduleTime
+                                            });
+                                        }}
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Estimated End Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.schedule.end_time}
+                                        onChange={(e) => {
+                                            const endTimeVal = e.target.value;
+                                            let autoStartTime = formData.schedule.start_time;
+                                            let autoScheduleTime = formData.scheduled_at;
+
+                                            if (endTimeVal) {
+                                                const endDate = new Date(endTimeVal);
+                                                if (!isNaN(endDate.getTime())) {
+                                                    // 1. Set Start Time to 30 mins before End Time
+                                                    const startDate = new Date(endDate.getTime() - 30 * 60000);
+                                                    autoStartTime = formatDateTimeLocal(startDate);
+
+                                                    // 2. Set Schedule Send Time to 30 mins before the NEW Start Time
+                                                    const scheduleDate = new Date(startDate.getTime() - 30 * 60000);
+                                                    autoScheduleTime = formatDateTimeLocal(scheduleDate);
+                                                }
+                                            }
+
+                                            setFormData({
+                                                ...formData,
+                                                schedule: {
+                                                    ...formData.schedule,
+                                                    end_time: endTimeVal,
+                                                    start_time: autoStartTime
+                                                },
+                                                scheduled_at: autoScheduleTime
+                                            });
+                                        }}
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Schedule Send Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.scheduled_at || ''}
+                                        onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     />
                                 </div>
                             </div>
 
+                            {/* Row 3: Subject Line (Multi-column) */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Message Body</label>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Subject Line</label>
+                                <input
+                                    type="text"
+                                    value={formData.content.subject}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        content: { ...formData.content, subject: e.target.value }
+                                    })}
+                                    className="w-full px-3 py-2 border border-blue-100 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium bg-blue-50/30"
+                                    placeholder="Enter notification subject..."
+                                />
+                            </div>
+
+                            {/* Project Selection & Recipients */}
+                            <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Affected Project & Recipients</label>
+                                    {formData.project_id && projectMembers.length > 0 && (
+                                        <button
+                                            onClick={toggleAllRecipients}
+                                            className="text-[10px] text-blue-600 font-bold hover:underline"
+                                        >
+                                            {selectedEmails.length === projectMembers.length ? 'Deselect All' : 'Select All'}
+                                        </button>
+                                    )}
+                                </div>
+                                <select
+                                    value={formData.project_id || ''}
+                                    onChange={(e) => {
+                                        const pid = e.target.value ? Number(e.target.value) : null;
+                                        let newContent = { ...formData.content };
+                                        if (pid) {
+                                            const project = projects.find(p => p.project_id === pid);
+                                            if (project) {
+                                                if (formData.type === DowntimeType.PLANNED_MAINTENANCE) {
+                                                    newContent.subject = `Scheduled Maintenance: ${project.project_name}`;
+                                                    newContent.message_body = `We will be performing scheduled maintenance on the ${project.project_name} to improve performance and security.`;
+                                                } else if (formData.type === DowntimeType.EMERGENCY_OUTAGE) {
+                                                    newContent.subject = `Urgent: Service Disruption - ${project.project_name}`;
+                                                    newContent.message_body = `We are currently experiencing an unexpected issue with ${project.project_name}. Our engineering team is actively investigating the root cause.`;
+                                                }
+                                            }
+                                        }
+                                        setFormData({
+                                            ...formData,
+                                            project_id: pid,
+                                            content: newContent,
+                                            audience: pid ? Audience.PROJECT_MEMBERS : formData.audience
+                                        });
+                                    }}
+                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm mb-3 bg-white shadow-sm"
+                                >
+                                    <option value="">Specific Project (Optional)...</option>
+                                    {projects.map(p => (
+                                        <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+                                    ))}
+                                </select>
+
+                                {formData.project_id && (
+                                    <div className="mt-1">
+                                        <p className="text-[10px] font-bold text-gray-400 mb-1.5 uppercase tracking-widest flex justify-between border-b pb-1 border-gray-100">
+                                            <span>Notify Recipients ({selectedEmails.length}/{projectMembers.length})</span>
+                                            {fetchingMembers && <span className="animate-pulse">Loading...</span>}
+                                        </p>
+                                        <div className="space-y-1 max-h-56 overflow-y-auto pr-1 mt-1.5 scrollbar-thin scrollbar-thumb-gray-200">
+                                            {projectMembers.map((member: any) => (
+                                                <div
+                                                    key={member.user_id || member.email}
+                                                    onClick={() => toggleRecipient(member.email)}
+                                                    className={`flex items-center text-[11px] border rounded-lg p-1 transition-all
+                                                        ${selectedEmails.includes(member.email)
+                                                            ? 'bg-blue-50/50 border-blue-200 shadow-sm ring-1 ring-blue-50'
+                                                            : 'bg-white border-gray-100 hover:border-gray-300'}`}
+                                                >
+                                                    <div className="flex items-center justify-center mr-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedEmails.includes(member.email)}
+                                                            onChange={() => { }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+                                                        <div className="flex items-center flex-1 min-w-0 gap-2">
+                                                            <div className="font-bold text-gray-900 truncate whitespace-nowrap">{member.first_name} {member.last_name}</div>
+                                                            <span className="text-gray-300 font-light">|</span>
+                                                            <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter flex-shrink-0 border border-blue-100/50">
+                                                                {member.role || 'Member'}
+                                                            </span>
+                                                            <span className="text-gray-300 font-light">|</span>
+                                                            <span className="text-[10px] text-gray-500 truncate font-medium">{member.email}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {!fetchingMembers && projectMembers.length === 0 && (
+                                                <div className="col-span-full py-6 text-center text-gray-400 italic bg-white rounded-lg border border-dashed">No members found for this project.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Message Body */}
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-1">Message Body</label>
                                 <textarea
                                     value={formData.content.message_body}
                                     onChange={(e) => setFormData({
                                         ...formData,
                                         content: { ...formData.content, message_body: e.target.value }
                                     })}
-                                    rows={3}
-                                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
-                                    placeholder="Explanation of the downtime..."
+                                    rows={4}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm leading-relaxed"
+                                    placeholder="Provide a detailed explanation of the downtime..."
                                 />
                             </div>
 
-                            {/* Scheduling */}
-                            <div className="pt-3 border-t border-gray-100">
-                                <div className="flex items-end gap-3">
-                                    <div className="flex-1">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Schedule Send Time</label>
-                                        <input
-                                            type="datetime-local"
-                                            value={formData.scheduled_at || ''}
-                                            onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
-                                            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                        />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSend(false)}
-                                            disabled={sending}
-                                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${formData.scheduled_at
-                                                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                }`}
-                                        >
-                                            Schedule
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setFormData(prev => ({ ...prev, scheduled_at: '' }));
-                                                handleSend(true);
-                                            }}
-                                            disabled={sending}
-                                            className="px-4 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors text-sm font-medium shadow-sm flex items-center gap-2 disabled:opacity-50"
-                                        >
-                                            {sending ? statusMessage || 'Sending...' : 'Send Now 🚀'}
-                                        </button>
-                                    </div>
-                                </div>
+                            {/* Action Buttons */}
+                            <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSend(false)}
+                                    disabled={sending || !formData.scheduled_at}
+                                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2
+                                        ${formData.scheduled_at
+                                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                            : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`}
+                                >
+                                    <span>📅</span> Schedule Broadcast
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setFormData(prev => ({ ...prev, scheduled_at: '' }));
+                                        handleSend(true);
+                                    }}
+                                    disabled={sending}
+                                    className="px-8 py-2 bg-gray-900 text-white rounded-xl hover:bg-black transition-all text-sm font-bold shadow-lg hover:shadow-xl flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {sending ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                            {statusMessage || 'Transmitting...'}
+                                        </>
+                                    ) : (
+                                        <><span>🚀</span> Send Now</>
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>
 
                     {/* RIGHT SIDE: LIVE PREVIEW */}
-                    <div className="bg-gray-100 rounded-xl flex flex-col items-center justify-start p-4 overflow-y-auto">
+                    <div className="bg-gray-100 rounded-xl flex flex-col items-center justify-start p-4 overflow-y-auto min-h-[600px]">
                         <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Live Email Preview</div>
 
                         <div className={`w-full max-w-sm bg-white rounded-lg shadow-xl overflow-hidden border ${theme.border}`}>
                             {/* Email Header */}
                             <div className={`${theme.header} p-3 text-white text-center`}>
-                                <div className="text-2xl mb-1">
-                                    {formData.type === DowntimeType.EMERGENCY_OUTAGE ? '🚨' : formData.type === DowntimeType.FEATURE_UPGRADE ? '🚀' : '🔧'}
-                                </div>
                                 <h3 className="font-bold text-base tracking-tight">
                                     {formData.type === DowntimeType.EMERGENCY_OUTAGE ? 'Service Outage Notification' : formData.type === DowntimeType.FEATURE_UPGRADE ? 'New Feature Alert' : 'System Maintenance Alert'}
                                 </h3>

@@ -39,6 +39,7 @@ export interface DowntimeNotificationRequest {
     audience: Audience | string;
     project_id?: number | null;
     target_roles?: string[]; // Filter by roles
+    target_emails?: string[]; // Specific recipients list
     content: Content;
     scheduled_at?: string; // ISO String for delayed sending
 }
