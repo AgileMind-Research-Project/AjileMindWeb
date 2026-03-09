@@ -300,35 +300,55 @@ export default function RAGDocumentChatbot() {
     : reports?.find(d => d.id === selectedReportId)?.doc_title;
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg shadow-lg overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 shadow-md">
+    <div className="flex flex-col h-full rounded-2xl overflow-hidden" style={{
+      backgroundColor: 'var(--am-bg-card)',
+      border: '1px solid var(--am-border)',
+      boxShadow: 'var(--am-shadow-lg)',
+    }}>
+      {/* Header - AI Accent color */}
+      <div className="p-6" style={{
+        background: 'linear-gradient(135deg, var(--am-accent) 0%, var(--am-accent-dark) 100%)',
+        color: 'white',
+      }}>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileText className="w-6 h-6" />
           Report Chatbot
         </h1>
-        <p className="text-blue-100 mt-2">Ask questions about your reports using AI</p>
+        <p className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>Ask questions about your reports using AI</p>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Control Panel */}
-        <div className="bg-white border-b border-slate-200 p-4 space-y-3">
+        <div className="p-4 space-y-3" style={{ backgroundColor: 'white', borderBottom: '1px solid var(--am-border)' }}>
           {/* Date Picker */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                <Calendar className="w-4 h-4 inline mr-2" />
+              <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--am-text-primary)' }}>
+                <Calendar className="w-4 h-4 inline mr-2" style={{ color: 'var(--am-accent)' }} />
                 Select Report Date
               </label>
               <select
                 value={selectedDate}
                 onChange={handleDateChange}
                 disabled={datesLoading}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
+                className="w-full px-4 py-2.5 rounded-xl text-sm transition-all duration-200 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  border: '1.5px solid var(--am-border)',
+                  color: 'var(--am-text-primary)',
+                  backgroundColor: 'white',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--am-accent)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(20, 184, 166, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--am-border)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
                 <option value="">Choose a date...</option>
-                <option value="all" className="font-semibold text-blue-600">All Dates (Search All Reports)</option>
+                <option value="all" style={{ fontWeight: 600 }}>All Dates (Search All Reports)</option>
                 {availableDates?.map((dateObj) => (
                   <option key={dateObj.uploaded_date} value={dateObj.uploaded_date}>
                     {new Date(dateObj.uploaded_date).toLocaleDateString()} ({dateObj.count} reports)
@@ -336,7 +356,7 @@ export default function RAGDocumentChatbot() {
                 ))}
               </select>
               {datesError && (
-                <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--am-error)' }}>
                   <AlertCircle className="w-3 h-3" />
                   {datesError}
                 </p>
@@ -345,18 +365,31 @@ export default function RAGDocumentChatbot() {
 
             {/* Report Selector */}
             <div className="flex-1">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                <FileText className="w-4 h-4 inline mr-2" />
+              <label className="block text-sm font-semibold mb-2" style={{ color: 'var(--am-text-primary)' }}>
+                <FileText className="w-4 h-4 inline mr-2" style={{ color: 'var(--am-accent)' }} />
                 Select Report
               </label>
               <select
                 value={selectedReport}
                 onChange={handleReportChange}
                 disabled={!selectedDate || reportsLoading}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
+                className="w-full px-4 py-2.5 rounded-xl text-sm transition-all duration-200 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  border: '1.5px solid var(--am-border)',
+                  color: 'var(--am-text-primary)',
+                  backgroundColor: 'white',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--am-accent)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(20, 184, 166, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--am-border)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
                 <option value="">Choose a report...</option>
-                <option value="all" className="font-semibold text-blue-600">All Reports (Search All)</option>
+                <option value="all" style={{ fontWeight: 600 }}>All Reports (Search All)</option>
                 {reports?.map((report) => (
                   <option key={report.id} value={report.id}>
                     {report.doc_title}
@@ -364,36 +397,39 @@ export default function RAGDocumentChatbot() {
                 ))}
               </select>
               {reportsError && (
-                <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--am-error)' }}>
                   <AlertCircle className="w-3 h-3" />
                   {reportsError}
                 </p>
               )}
               {!selectedDate && (
-                <p className="text-slate-500 text-xs mt-1">Select a date first or choose "All Dates"</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--am-text-muted)' }}>Select a date first or choose &quot;All Dates&quot;</p>
               )}
             </div>
           </div>
 
           {/* Selected Report Info */}
           {selectedReportTitle && (
-            <div className={`flex items-center gap-2 p-3 border rounded-lg ${isSearchAll ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-              <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${isSearchAll ? 'text-green-600' : 'text-blue-600'}`} />
-              <span className={`text-sm ${isSearchAll ? 'text-green-900' : 'text-blue-900'}`}>
+            <div className="flex items-center gap-2 p-3 rounded-xl" style={{
+              backgroundColor: isSearchAll ? 'var(--am-accent-50)' : 'var(--am-primary-50)',
+              border: `1px solid ${isSearchAll ? 'var(--am-accent-100)' : 'var(--am-primary-100)'}`,
+            }}>
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: isSearchAll ? 'var(--am-accent)' : 'var(--am-primary)' }} />
+              <span className="text-sm" style={{ color: isSearchAll ? 'var(--am-accent-dark)' : 'var(--am-primary-dark)' }}>
                 <strong>{isSearchAll ? 'Search Mode:' : 'Current:'}</strong> {selectedReportTitle}
-                {isSearchAll && !isGlobalSearch && <span className="ml-2 text-xs text-green-700">(Will search reports from {new Date(selectedDate).toLocaleDateString()} only)</span>}
-                {isGlobalSearch && <span className="ml-2 text-xs text-green-700">(Will search all reports across all dates)</span>}
+                {isSearchAll && !isGlobalSearch && <span className="ml-2 text-xs" style={{ color: 'var(--am-accent)' }}>(Will search reports from {new Date(selectedDate).toLocaleDateString()} only)</span>}
+                {isGlobalSearch && <span className="ml-2 text-xs" style={{ color: 'var(--am-accent)' }}>(Will search all reports across all dates)</span>}
               </span>
             </div>
           )}
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ backgroundColor: 'var(--am-bg)' }}>
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400">
+            <div className="h-full flex flex-col items-center justify-center" style={{ color: 'var(--am-text-muted)' }}>
               <FileText className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-center max-w-md">
+              <p className="text-center max-w-md text-sm">
                 {selectedReport
                   ? (isSearchAll 
                     ? (isGlobalSearch 
@@ -410,16 +446,26 @@ export default function RAGDocumentChatbot() {
                 className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-2xl rounded-lg px-4 py-3 ${
+                  className="max-w-2xl rounded-2xl px-4 py-3"
+                  style={
                     msg.type === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-none'
-                      : 'bg-slate-200 text-slate-900 rounded-bl-none'
-                  }`}
+                      ? {
+                          backgroundColor: 'var(--am-primary)',
+                          color: 'white',
+                          borderBottomRightRadius: '4px',
+                        }
+                      : {
+                          backgroundColor: 'white',
+                          color: 'var(--am-text-primary)',
+                          borderBottomLeftRadius: '4px',
+                          border: '1px solid var(--am-border)',
+                        }
+                  }
                 >
                   <p className="text-sm break-words whitespace-pre-wrap">{msg.content}</p>
-                  <p className={`text-xs mt-1 ${
-                    msg.type === 'user' ? 'text-blue-100' : 'text-slate-500'
-                  }`}>
+                  <p className="text-xs mt-1" style={{
+                    color: msg.type === 'user' ? 'rgba(255,255,255,0.7)' : 'var(--am-text-muted)'
+                  }}>
                     {msg.timestamp.toLocaleTimeString()}
                   </p>
                 </div>
@@ -428,10 +474,14 @@ export default function RAGDocumentChatbot() {
           )}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-slate-200 text-slate-900 rounded-lg px-4 py-3 rounded-bl-none">
+              <div className="rounded-2xl px-4 py-3" style={{
+                backgroundColor: 'white',
+                border: '1px solid var(--am-border)',
+                borderBottomLeftRadius: '4px',
+              }}>
                 <div className="flex items-center gap-2">
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <p className="text-sm">Generating response...</p>
+                  <Loader className="w-4 h-4 animate-spin" style={{ color: 'var(--am-accent)' }} />
+                  <p className="text-sm" style={{ color: 'var(--am-text-secondary)' }}>Generating response...</p>
                 </div>
               </div>
             </div>
@@ -440,9 +490,13 @@ export default function RAGDocumentChatbot() {
         </div>
 
         {/* Input Area */}
-        <div className="bg-white border-t border-slate-200 p-4">
+        <div className="p-4" style={{ backgroundColor: 'white', borderTop: '1px solid var(--am-border)' }}>
           {chatError && (
-            <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs flex items-center gap-2">
+            <div className="mb-3 p-2 rounded-lg text-xs flex items-center gap-2" style={{
+              backgroundColor: 'var(--am-error-light)',
+              border: '1px solid var(--am-error-border)',
+              color: '#991B1B',
+            }}>
               <AlertCircle className="w-4 h-4" />
               {chatError}
             </div>
@@ -459,14 +513,37 @@ export default function RAGDocumentChatbot() {
                   : (selectedReport ? "Ask a question..." : "Select a report first...")
               }
               disabled={(!selectedReport && !isSearchAll) || loading}
-              className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm transition-all duration-200 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                border: '1.5px solid var(--am-border)',
+                color: 'var(--am-text-primary)',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'var(--am-accent)';
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(20, 184, 166, 0.1)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = 'var(--am-border)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
             />
             <button
               type="submit"
               disabled={(!selectedReport && !isSearchAll) || !query.trim() || loading}
-              className={`px-4 py-2 text-white rounded-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors ${
-                isSearchAll ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              className="px-5 py-2.5 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 font-semibold text-sm transition-all duration-200"
+              style={{
+                backgroundColor: isSearchAll ? 'var(--am-accent)' : 'var(--am-primary)',
+              }}
+              onMouseEnter={(e) => {
+                if (!e.currentTarget.disabled) {
+                  e.currentTarget.style.backgroundColor = isSearchAll ? 'var(--am-accent-dark)' : 'var(--am-primary-dark)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isSearchAll ? 'var(--am-accent)' : 'var(--am-primary)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
               {loading ? (
                 <>
