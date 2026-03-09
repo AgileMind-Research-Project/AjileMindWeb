@@ -19,6 +19,8 @@ export default function DownTimeSender() {
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [backlogReleases, setBacklogReleases] = useState<BacklogRelease[]>([]);
     const [loadingBacklog, setLoadingBacklog] = useState(false);
+    const [autoReleaseNote, setAutoReleaseNote] = useState(true);
+    const [selectedBacklogItem, setSelectedBacklogItem] = useState<BacklogRelease | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<DowntimeNotificationRequest>({
@@ -252,7 +254,30 @@ export default function DownTimeSender() {
 
             const response = await notificationsApi.sendDowntimeNotification(payload as any);
             if (response.success) {
-                toast.success(immediate ? response.message : "Scheduled set successfully");
+                // If autoReleaseNote is enabled, schedule the follow-up release note
+                if (autoReleaseNote && formData.schedule.end_time) {
+                    try {
+                        const endTimeDate = new Date(formData.schedule.end_time);
+                        const releaseNoteScheduledAt = new Date(endTimeDate.getTime() + 10 * 60000);
+
+                        const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
+
+                        const releasePayload = {
+                            ...payload,
+                            type: DowntimeType.FEATURE_UPGRADE,
+                            scheduled_at: formatDateTimeLocal(releaseNoteScheduledAt),
+                            content: {
+                                subject: `Release Details: ${projectName} - Maintenance Completed`,
+                                message_body: `The scheduled maintenance for ${projectName} is now complete. \n\nRelated Release Details:\n${selectedBacklogItem ? `Summary: ${selectedBacklogItem.summary}\nDescription: ${selectedBacklogItem.description || 'N/A'}` : formData.content.subject}\n\nThank you for your patience.`
+                            }
+                        };
+                        await notificationsApi.sendDowntimeNotification(releasePayload as any);
+                    } catch (err) {
+                        console.error('Failed to schedule follow-up release note:', err);
+                    }
+                }
+
+                toast.success(immediate ? response.message : (autoReleaseNote ? "Downtime & Release Note scheduled! 🚀" : "Scheduled set successfully"));
                 if (activeTab === 'history') {
                     loadHistory();
                 } else {
@@ -321,6 +346,8 @@ export default function DownTimeSender() {
                 : '',
         });
 
+        setSelectedBacklogItem(item);
+        setAutoReleaseNote(true);
         setActiveTab('send');
         toast.success(`📋 Form auto-filled from: ${item.summary}`);
     };
@@ -606,6 +633,29 @@ export default function DownTimeSender() {
                                 />
                             </div>
 
+                            {/* Automation Selection - Special Point * */}
+                            <div className="bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100/50">
+                                <label className="flex items-center gap-3 cursor-pointer group">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={autoReleaseNote}
+                                            onChange={(e) => setAutoReleaseNote(e.target.checked)}
+                                            className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="text-[11px] font-extrabold text-indigo-900 flex items-center gap-1.5 capitalize">
+                                            <span>Auto-send Release Note after maintenance</span>
+                                            <span className="text-red-500 font-black animate-pulse text-lg" title="Special Automation Point">*</span>
+                                        </div>
+                                        <div className="text-[9px] text-indigo-600/70 font-bold tracking-tight">
+                                            A follow-up notification with release details will be sent 10 mins after the Estimated End Time.
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+
                             {/* Project Selection & Recipients */}
                             <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
                                 <div className="flex items-center justify-between mb-1.5">
@@ -747,54 +797,90 @@ export default function DownTimeSender() {
                     </div>
 
                     {/* RIGHT SIDE: LIVE PREVIEW */}
-                    <div className="bg-gray-100 rounded-xl flex flex-col items-center justify-start p-4 overflow-y-auto min-h-[600px]">
-                        <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Live Email Preview</div>
+                    <div className="bg-gray-100/50 rounded-xl flex flex-col items-center justify-start p-4 overflow-y-auto min-h-[600px] border border-gray-200/50">
+                        <div className="mb-3 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Live Email Preview</div>
 
-                        <div className={`w-full max-w-sm bg-white rounded-lg shadow-xl overflow-hidden border ${theme.border}`}>
+                        <div className={`w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border ${theme.border} transform transition-all hover:scale-[1.01]`}>
                             {/* Email Header */}
-                            <div className={`${theme.header} p-3 text-white text-center`}>
-                                <h3 className="font-bold text-base tracking-tight">
-                                    {formData.type === DowntimeType.EMERGENCY_OUTAGE ? 'Service Outage Notification' : formData.type === DowntimeType.FEATURE_UPGRADE ? 'New Feature Alert' : 'System Maintenance Alert'}
+                            <div className={`${theme.header} p-4 text-white text-center shadow-inner`}>
+                                <div className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Official Notification</div>
+                                <h3 className="font-extrabold text-white text-lg tracking-tight drop-shadow-sm">
+                                    {formData.type === DowntimeType.EMERGENCY_OUTAGE ? 'Service Outage' : formData.type === DowntimeType.FEATURE_UPGRADE ? 'New Features' : 'System Maintenance'}
                                 </h3>
                             </div>
 
                             {/* Email Body */}
-                            <div className="p-4 space-y-3">
-                                <div className="border-b border-gray-100 pb-2">
-                                    <h4 className="font-bold text-gray-900 text-sm leading-tight">{formData.content.subject}</h4>
+                            <div className="p-5 space-y-4">
+                                <div className="border-b border-gray-100 pb-3 flex justify-between items-start">
+                                    <h4 className="font-extrabold text-gray-900 text-sm leading-snug flex-1 mr-3">{formData.content.subject}</h4>
+                                    <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border ${formData.priority === Priority.HIGH ? 'bg-red-50 text-red-600 border-red-200' : formData.priority === Priority.MEDIUM ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                        {formData.priority}
+                                    </div>
                                 </div>
 
-                                <div className="prose prose-xs text-gray-600">
-                                    <p className="text-xs">Dear {formData.audience === Audience.INTERNAL_TEAM ? 'Team' : 'User'},</p>
-                                    <p className="whitespace-pre-wrap text-[11px]">{formData.content.message_body}</p>
+                                <div className="text-gray-600 space-y-3">
+                                    <p className="text-[11px] font-semibold text-gray-800">
+                                        Hi {projectMembers.length > 0 ? projectMembers[0].first_name : (formData.audience === Audience.INTERNAL_TEAM ? 'Team' : 'there')},
+                                    </p>
+                                    <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-gray-600 italic">"{formData.content.message_body}"</p>
                                 </div>
 
                                 {/* Details Box */}
-                                <div className={`${theme.bg} rounded-lg p-3 border ${theme.border} space-y-2`}>
-                                    <div className="grid grid-cols-3 gap-1 text-[10px]">
-                                        <div className="text-gray-500 font-medium">📅 When:</div>
-                                        <div className={`col-span-2 font-medium ${theme.text}`}>
-                                            {formData.schedule.start_time ? new Date(formData.schedule.start_time).toLocaleString() : '[Start Date]'}
+                                <div className={`${theme.bg} rounded-xl p-4 border ${theme.border} space-y-3 shadow-inner`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-1.5 bg-white rounded-lg shadow-sm">📅</div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">Timeline</div>
+                                            <div className={`text-[11px] font-bold ${theme.text} mt-0.5`}>
+                                                {formData.schedule.start_time
+                                                    ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(formData.schedule.start_time))
+                                                    : '[Start Date]'}
+                                                <span className="mx-1.5 text-gray-300">→</span>
+                                                {formData.schedule.end_time
+                                                    ? new Intl.DateTimeFormat('en-US', { timeStyle: 'short' }).format(new Date(formData.schedule.end_time))
+                                                    : '[End]'}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-1 text-[10px]">
-                                        <div className="text-gray-500 font-medium">⏳ Until:</div>
-                                        <div className={`col-span-2 font-medium ${theme.text}`}>
-                                            {formData.schedule.end_time ? new Date(formData.schedule.end_time).toLocaleString() : '[End Date]'}
+
+                                    <div className="flex items-start gap-3 border-t border-white/50 pt-2">
+                                        <div className="p-1.5 bg-white rounded-lg shadow-sm">🎯</div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">Service Impact</div>
+                                            <div className={`text-[10px] font-bold ${theme.text} mt-0.5 flex flex-wrap gap-1 items-center`}>
+                                                {formData.project_id ? (
+                                                    <span className="bg-white/50 px-1.5 py-0.5 rounded border border-white">
+                                                        {projects.find(p => p.project_id === formData.project_id)?.project_name}
+                                                    </span>
+                                                ) : null}
+                                                {formData.affected_components.length > 0 ? (
+                                                    formData.affected_components.map(c => (
+                                                        <span key={c} className="bg-white/50 px-1.5 py-0.5 rounded border border-white">
+                                                            {c}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span className="italic opacity-50">Generic System Update</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-1 text-[10px]">
-                                        <div className="text-gray-500 font-medium">📉 Impact:</div>
-                                        <div className={`col-span-2 font-medium ${theme.text}`}>
-                                            {formData.affected_components.length > 0 ? formData.affected_components.join(', ') : '[Selected Components]'}
-                                        </div>
-                                    </div>
+                                </div>
+
+                                <div className="pt-2 text-center">
+                                    <div className="text-[9px] text-gray-400 font-medium">Auto-generated by AjileMind System</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="mt-4 text-center text-xs text-gray-400 max-w-xs">
-                            This is how the email will appear to {projectMembers.length > 0 ? `${projectMembers.length} members` : 'recipients'}.
+                        <div className="mt-6 p-4 bg-white/40 rounded-xl border border-dashed border-gray-300 text-center">
+                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Distribution</div>
+                            <div className="text-[11px] text-gray-600 font-medium italic">
+                                "{formData.audience.replace('_', ' ')}"
+                                {projectMembers.length > 0 && selectedEmails.length > 0
+                                    ? ` • ${selectedEmails.length} Selected Members`
+                                    : ''}
+                            </div>
                         </div>
                     </div>
                 </div>
