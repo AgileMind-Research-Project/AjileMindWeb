@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { releaseNotesApi, ReleaseNote, CreateReleaseNoteRequest, ReleaseNoteContent, BacklogRelease } from '@/lib/api/release-notes.api';
 import { projectsApi } from '@/lib/api/projects.api';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import {
+    Download,
+    X,
+    FileText,
+    Sparkles,
+    Zap,
+    ShieldAlert,
+    Bug,
+    Calendar,
+    Layers,
+    CheckCircle2,
+    Clock,
+    User,
+    ArrowRight
+} from 'lucide-react';
 
 const ReleaseNotes: React.FC = () => {
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
@@ -16,6 +33,9 @@ const ReleaseNotes: React.FC = () => {
     const [showSprintBacklogModal, setShowSprintBacklogModal] = useState(false);
     const [sprintBacklogItems, setSprintBacklogItems] = useState<any[]>([]);
     const [selectedSprint, setSelectedSprint] = useState<{ project_id: number, sprint_id: number | null } | null>(null);
+    const [showOfficialNoteModal, setShowOfficialNoteModal] = useState(false);
+    const [selectedOfficialNote, setSelectedOfficialNote] = useState<ReleaseNote | null>(null);
+    const pdfContentRef = useRef<HTMLDivElement>(null);
 
     // Form state
     const [formData, setFormData] = useState<CreateReleaseNoteRequest>({
@@ -249,6 +269,31 @@ const ReleaseNotes: React.FC = () => {
         setShowModal(true);
     };
 
+    const handleViewOfficialNote = (note: ReleaseNote) => {
+        setSelectedOfficialNote(note);
+        setShowOfficialNoteModal(true);
+    };
+
+    const downloadAsPDF = async () => {
+        if (!pdfContentRef.current || !selectedOfficialNote) return;
+
+        const canvas = await html2canvas(pdfContentRef.current, {
+            scale: 2, // Higher quality
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`${selectedOfficialNote.title.replace(/\s+/g, '_')}_v${selectedOfficialNote.version}.pdf`);
+        toast.success('PDF Downloaded successfully');
+    };
+
     const resetForm = () => {
         setFormData({
             project_id: 0,
@@ -477,7 +522,7 @@ const ReleaseNotes: React.FC = () => {
                                         <td className="px-3 py-2 text-right">
                                             <div className="flex justify-end gap-2 items-center">
                                                 <button
-                                                    onClick={() => toast.info(`Viewing v${note.version}`)}
+                                                    onClick={() => handleViewOfficialNote(note)}
                                                     className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
                                                     title="View Details"
                                                 >
@@ -889,6 +934,236 @@ const ReleaseNotes: React.FC = () => {
                             >
                                 Close
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* View Official Release Note Modal - Re-designed for Professional Look */}
+            {showOfficialNoteModal && selectedOfficialNote && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md transition-all duration-300">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-300">
+                        {/* Elegant Minimal Header */}
+                        <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner">
+                                    <FileText size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 leading-none">Release Documentation</h3>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                            <ShieldAlert size={10} className="text-indigo-400" /> Authorized Copy
+                                        </span>
+                                        <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v{selectedOfficialNote.version}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={downloadAsPDF}
+                                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 group"
+                                >
+                                    <Download size={14} className="group-hover:-translate-y-0.5 transition-transform" />
+                                    EXPORT AS PDF
+                                </button>
+                                <button
+                                    onClick={() => setShowOfficialNoteModal(false)}
+                                    className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Professional Document Body */}
+                        <div className="flex-1 overflow-y-auto p-0" style={{ backgroundColor: 'rgba(241, 245, 249, 0.3)' }}>
+                            <div className="max-w-4xl mx-auto my-10 bg-white shadow-xl border border-slate-100 rounded-sm" ref={pdfContentRef} style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
+                                {/* Document Header Panel */}
+                                <div className="p-12 border-b" style={{ borderBottomColor: '#f1f5f9' }}>
+                                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12">
+                                        <div className="flex-1">
+                                            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded text-[10px] font-black tracking-widest uppercase mb-6 border" style={{ backgroundColor: '#eef2ff', color: '#4338ca', borderColor: 'rgba(199, 210, 254, 0.5)' }}>
+                                                <Zap size={10} /> Official Release
+                                            </div>
+                                            <h1 className="text-4xl font-extrabold tracking-tight leading-tight mb-4" style={{ color: '#0f172a' }}>
+                                                {selectedOfficialNote.title}
+                                            </h1>
+                                            {selectedOfficialNote.summary && (
+                                                <p className="text-lg leading-relaxed max-w-2xl font-medium" style={{ color: '#64748b' }}>
+                                                    {selectedOfficialNote.summary}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Metadata Card */}
+                                        <div className="w-full md:w-64 rounded-2xl p-6 border shrink-0" style={{ backgroundColor: '#f8fafc', borderColor: '#f1f5f9' }}>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Project</span>
+                                                    <span className="text-sm font-bold flex items-center gap-2" style={{ color: '#0f172a' }}>
+                                                        <Layers size={14} style={{ color: '#6366f1' }} />
+                                                        {projects.find(p => p.project_id === selectedOfficialNote.project_id)?.project_name || 'Project ' + selectedOfficialNote.project_id}
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-4">
+                                                    <div className="flex-1">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Version</span>
+                                                        <span className="text-lg font-black block" style={{ color: '#4f46e5' }}>v{selectedOfficialNote.version}</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Type</span>
+                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border" style={
+                                                            selectedOfficialNote.release_type === 'MAJOR' ? { backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fee2e2' } :
+                                                                selectedOfficialNote.release_type === 'MINOR' ? { backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#e0e7ff' } :
+                                                                    { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#d1fae5' }
+                                                        }>
+                                                            {selectedOfficialNote.release_type}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest block mb-1" style={{ color: '#94a3b8' }}>Release Date</span>
+                                                    <span className="text-sm font-bold flex items-center gap-2" style={{ color: '#0f172a' }}>
+                                                        <Calendar size={14} style={{ color: '#6366f1' }} />
+                                                        {selectedOfficialNote.release_date || new Date(selectedOfficialNote.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Quick Statistics Bar - Professional style */}
+                                    <div className="grid grid-cols-4 gap-4 py-8 border-y" style={{ borderTopColor: '#f8fafc', borderBottomColor: '#f8fafc' }}>
+                                        {[
+                                            { label: 'Features', value: selectedOfficialNote.content.features?.length || 0, color: '#4f46e5', bg: '#eef2ff', icon: Sparkles },
+                                            { label: 'Fixes', value: selectedOfficialNote.content.bug_fixes?.length || 0, color: '#d97706', bg: '#fffbeb', icon: Bug },
+                                            { label: 'Optimized', value: selectedOfficialNote.content.improvements?.length || 0, color: '#059669', bg: '#ecfdf5', icon: Zap },
+                                            { label: 'Breaking', value: selectedOfficialNote.content.breaking_changes?.length || 0, color: '#e11d48', bg: '#fff1f2', icon: ShieldAlert },
+                                        ].map((stat, i) => (
+                                            <div key={i} className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg, color: stat.color }}>
+                                                    <stat.icon size={14} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-lg font-black leading-none" style={{ color: '#0f172a' }}>{stat.value}</div>
+                                                    <div className="text-[10px] font-bold uppercase mt-0.5" style={{ color: '#94a3b8' }}>{stat.label}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Main Detailed Content */}
+                                <div className="p-12 space-y-16">
+                                    {/* Features Section */}
+                                    {selectedOfficialNote.content.features?.length > 0 && (
+                                        <section>
+                                            <div className="flex items-center gap-4 mb-8">
+                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
+                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#4f46e5' }}></span>
+                                                    Principal Features
+                                                </h3>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {selectedOfficialNote.content.features.map((item, idx) => (
+                                                    <div key={idx} className="group p-5 rounded-2xl bg-white border hover:shadow-md transition-all flex items-start gap-4" style={{ borderColor: '#f1f5f9' }}>
+                                                        <div className="mt-1 w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px]" style={{ backgroundColor: '#eef2ff', color: '#4f46e5' }}>
+                                                            {idx + 1}
+                                                        </div>
+                                                        <p className="font-medium leading-relaxed" style={{ color: '#334155' }}>{item}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Improvements & Optimizations Section */}
+                                    {selectedOfficialNote.content.improvements?.length > 0 && (
+                                        <section>
+                                            <div className="flex items-center gap-4 mb-8">
+                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
+                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#10b981' }}></span>
+                                                    System Optimizations
+                                                </h3>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {selectedOfficialNote.content.improvements.map((item, idx) => (
+                                                    <div key={idx} className="flex items-start gap-4 p-4 rounded-xl transition-colors hover:bg-[#f8fafc]">
+                                                        <CheckCircle2 size={18} className="mt-0.5 shrink-0" style={{ color: '#10b981' }} />
+                                                        <p className="font-medium leading-relaxed" style={{ color: '#475569' }}>{item}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Maintenance & Bug Fixes Section */}
+                                    {selectedOfficialNote.content.bug_fixes?.length > 0 && (
+                                        <section>
+                                            <div className="flex items-center gap-4 mb-8">
+                                                <h3 className="text-sm font-black uppercase tracking-[0.2em] flex items-center gap-3" style={{ color: '#0f172a' }}>
+                                                    <span className="w-10 h-0.5" style={{ backgroundColor: '#f59e0b' }}></span>
+                                                    Security & Maintenance
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-3xl p-8 border" style={{ backgroundColor: 'rgba(248, 250, 252, 0.5)', borderColor: '#f1f5f9' }}>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                                                    {selectedOfficialNote.content.bug_fixes.map((item, idx) => (
+                                                        <div key={idx} className="flex items-start gap-3">
+                                                            <div className="mt-2 w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: '#fbbf24' }}></div>
+                                                            <p className="text-sm font-medium leading-relaxed" style={{ color: '#475569' }}>{item}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Essential Notifications / Breaking Changes */}
+                                    {selectedOfficialNote.content.breaking_changes?.length > 0 && (
+                                        <section className="rounded-3xl p-8 border" style={{ backgroundColor: 'rgba(255, 241, 242, 0.5)', borderColor: 'rgba(255, 228, 230, 0.5)' }}>
+                                            <div className="flex items-center gap-3 mb-6" style={{ color: '#be123c' }}>
+                                                <ShieldAlert size={20} />
+                                                <h3 className="text-sm font-black uppercase tracking-[0.2em]">Mandatory Transitions</h3>
+                                            </div>
+                                            <div className="space-y-4">
+                                                {selectedOfficialNote.content.breaking_changes.map((item, idx) => (
+                                                    <div key={idx} className="p-5 rounded-2xl border shadow-sm flex items-start gap-4" style={{ backgroundColor: '#ffffff', borderColor: '#ffe4e6' }}>
+                                                        <ArrowRight size={18} className="mt-0.5 shrink-0" style={{ color: '#e11d48' }} />
+                                                        <p className="font-bold leading-relaxed" style={{ color: '#4c0519' }}>{item}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )}
+                                </div>
+
+                                {/* Footer & Compliance Branding */}
+                                <div className="p-12 border-t flex flex-col md:flex-row justify-between items-center gap-8" style={{ backgroundColor: 'rgba(248, 250, 252, 0.2)', borderTopColor: '#f1f5f9' }}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-xl" style={{ backgroundColor: '#0f172a' }}>A</div>
+                                        <div>
+                                            <div className="text-[10px] font-black uppercase tracking-widest mb-0.5" style={{ color: '#cbd5e1' }}>Automated Documentation</div>
+                                            <div className="text-sm font-bold" style={{ color: '#0f172a' }}>AgileMind Enterprise Intelligence</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 leading-none" style={{ color: '#cbd5e1' }}>Authentication Token</div>
+                                        <div className="font-mono text-[9px] px-3 py-1.5 rounded-lg border" style={{ color: '#94a3b8', backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
+                                            {btoa(`RN-${selectedOfficialNote.id}-${selectedOfficialNote.version}-${selectedOfficialNote.created_at}`).substring(0, 32).toUpperCase()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Contextual Action Hint */}
+                            <div className="max-w-4xl mx-auto px-12 py-12 text-center">
+                                <p className="text-xs font-medium flex items-center justify-center gap-2" style={{ color: '#94a3b8' }}>
+                                    <Clock size={12} /> This document is generated based on verified sprint completion logs.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
