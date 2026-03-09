@@ -18,14 +18,25 @@ export interface DailyBlocker {
     project_name: string;
     ai_suggestions: string[];
     suggested_mentor_role: string;
+    assignee_email?: string;
+    assignee_first_name?: string;
+    assignee_last_name?: string;
 }
 
 export const dailyBlockersApi = {
     /**
-     * Get all daily blockers with AI analysis
+     * Get all daily blockers
      */
-    getDailyBlockers: async (projectId?: number): Promise<{ success: boolean; data: DailyBlocker[] }> => {
-        const params = projectId ? { project_id: projectId } : {};
+    getDailyBlockers: async (projectId?: number, includeAi: boolean = false): Promise<{ success: boolean; data: DailyBlocker[] }> => {
+        const params: any = { include_ai: includeAi };
+        if (projectId) params.project_id = projectId;
         return httpClient.get('/task-updates/daily-blockers', { params });
+    },
+
+    /**
+     * Analyze a specific blocker
+     */
+    analyzeBlocker: async (blockerId: number): Promise<{ success: boolean; data: { ai_suggestions: string[]; suggested_mentor_role: string } }> => {
+        return httpClient.post(`/task-updates/daily-blockers/${blockerId}/analyze`);
     }
 };
