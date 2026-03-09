@@ -139,9 +139,24 @@ export default function RecurringBugsPage() {
 
   const totalPages = Math.ceil(data.total / data.page_size);
 
-  function handleResolve(bug_hash: string): void {
-    throw new Error("Function not implemented.");
-  }
+  const handleResolve = async (bugHash: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/recurring-bugs/${bugHash}/resolve`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to resolve bug");
+      }
+
+      fetchBugs();
+    } catch (err: any) {
+      alert(err.message || "Failed to resolve bug");
+    }
+  };
 
   return (
     <DashboardLayout>
