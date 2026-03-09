@@ -53,11 +53,10 @@ export function MessageBubble({
                             e.stopPropagation();
                             router.push(part);
                         }}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg font-semibold underline transition-all ${
-                            isOwn
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg font-semibold underline transition-all ${isOwn
                                 ? 'hover:bg-blue-500 text-white'
                                 : 'hover:bg-gray-200 text-blue-600'
-                        }`}
+                            }`}
                         title="Click to join meeting"
                     >
                         🎥 Join Meeting
@@ -111,7 +110,7 @@ export function MessageBubble({
                             )}
 
                             <p className="whitespace-pre-wrap break-words">
-                                {renderContentWithLinks(message.content)}
+                                {renderContentWithLinks(message.content || '')}
                             </p>
 
                             {message.is_edited && (

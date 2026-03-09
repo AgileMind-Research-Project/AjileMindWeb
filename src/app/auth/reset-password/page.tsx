@@ -30,6 +30,7 @@ function ResetPasswordContent() {
   const passwordValidation = validatePassword(formData.new_password);
 
   useEffect(() => {
+    if (!searchParams) return;
     const tokenParam = searchParams.get('token');
     if (tokenParam) {
       setToken(tokenParam);

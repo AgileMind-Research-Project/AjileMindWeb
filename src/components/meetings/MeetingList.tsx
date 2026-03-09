@@ -28,7 +28,7 @@ export default function MeetingList({ meetings, onStart, onEdit, onDelete, onVie
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-200">
             {meetings.map((meeting) => (
                 <div
-                    key={meeting.id}
+                    key={meeting.meeting_id}
                     onClick={() => onView(meeting)}
                     className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
@@ -36,8 +36,8 @@ export default function MeetingList({ meetings, onStart, onEdit, onDelete, onVie
                         <div className="flex items-start gap-4">
                             {/* Date Box */}
                             <div className="flex-shrink-0 w-16 h-16 bg-blue-50 rounded-lg flex flex-col items-center justify-center text-blue-700 border border-blue-100">
-                                <span className="text-xs font-semibold uppercase">{new Date(meeting.date).toLocaleString('default', { month: 'short' })}</span>
-                                <span className="text-xl font-bold">{new Date(meeting.date).getDate()}</span>
+                                <span className="text-xs font-semibold uppercase">{new Date(meeting.meeting_date).toLocaleString('default', { month: 'short' })}</span>
+                                <span className="text-xl font-bold">{new Date(meeting.meeting_date).getDate()}</span>
                             </div>
 
                             {/* Meeting Info */}
@@ -52,7 +52,7 @@ export default function MeetingList({ meetings, onStart, onEdit, onDelete, onVie
                                     </div>
                                     {/* Category Badge */}
                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                        {meeting.category}
+                                        {meeting.meeting_category}
                                     </span>
                                     {/* Status Badge */}
                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
