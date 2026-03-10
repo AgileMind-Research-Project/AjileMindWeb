@@ -160,14 +160,6 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcriptId, hasHydrated, accessToken, isAuthenticated]);
 
-  // ── auto-analyse once transcript is loaded ───────────────────────────────
-  useEffect(() => {
-    if (transcript?.id && accessToken) {
-      runAnalysis();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcript?.id]);
-
   // ── data fetchers ────────────────────────────────────────────────────────
   const fetchTranscript = async () => {
     try {
@@ -380,14 +372,6 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
 
             <div className="flex gap-2">
               <button
-                onClick={runAnalysis}
-                disabled={analyzing}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 disabled:opacity-50 transition-colors"
-              >
-                <Sparkles className={`w-4 h-4 ${analyzing ? 'animate-spin' : ''}`} />
-                {analyzing ? 'Analyzing...' : 'Analyze'}
-              </button>
-              <button
                 onClick={() => setShowGenerateModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
               >
@@ -564,7 +548,7 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
           >
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Raw Transcript
+              Transcript
             </h2>
             {contentExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
           </button>
