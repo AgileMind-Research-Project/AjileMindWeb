@@ -5,6 +5,16 @@ import { meetingsApi } from '@/lib/api/meetings.api';
 import { releaseNotesApi, BacklogRelease } from '@/lib/api/release-notes.api';
 import { toast } from 'sonner';
 
+// Helper to format date for datetime-local
+const formatDateTimeLocal = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 export default function DownTimeSender() {
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
@@ -30,8 +40,8 @@ export default function DownTimeSender() {
         priority: Priority.HIGH,
         affected_components: [],
         schedule: {
-            start_time: '',
-            end_time: '',
+            start_time: formatDateTimeLocal(new Date()),
+            end_time: formatDateTimeLocal(new Date(new Date().getTime() + 2 * 60 * 60 * 1000)), // Default +2 hours
             timezone: 'Asia/Colombo'
         },
         audience: Audience.ALL_USERS,
@@ -40,7 +50,7 @@ export default function DownTimeSender() {
             subject: 'Scheduled Maintenance: System Upgrade',
             message_body: 'We will be performing scheduled maintenance to improve system performance and security.'
         },
-        scheduled_at: '',
+        scheduled_at: formatDateTimeLocal(new Date()),
         target_roles: [],
         include_release_note: true,
         release_note_content: { subject: '', message_body: '' }
@@ -184,15 +194,6 @@ export default function DownTimeSender() {
         });
     };
 
-    // Helper to format date for datetime-local
-    const formatDateTimeLocal = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
 
     const handleSendScheduled = async (notificationId: number) => {
         if (!confirm('Send this scheduled notification now?')) return;
@@ -626,25 +627,10 @@ export default function DownTimeSender() {
                                     <input
                                         type="datetime-local"
                                         value={formData.schedule.start_time}
-                                        onChange={(e) => {
-                                            const startTimeVal = e.target.value;
-                                            let autoScheduleTime = formData.scheduled_at;
-
-                                            if (startTimeVal) {
-                                                const startDate = new Date(startTimeVal);
-                                                if (!isNaN(startDate.getTime())) {
-                                                    // Set Schedule Send Time to 30 mins before Start Time
-                                                    const scheduleDate = new Date(startDate.getTime() - 30 * 60000);
-                                                    autoScheduleTime = formatDateTimeLocal(scheduleDate);
-                                                }
-                                            }
-
-                                            setFormData({
-                                                ...formData,
-                                                schedule: { ...formData.schedule, start_time: startTimeVal },
-                                                scheduled_at: autoScheduleTime
-                                            });
-                                        }}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            schedule: { ...formData.schedule, start_time: e.target.value }
+                                        })}
                                         className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     />
                                 </div>
@@ -653,34 +639,10 @@ export default function DownTimeSender() {
                                     <input
                                         type="datetime-local"
                                         value={formData.schedule.end_time}
-                                        onChange={(e) => {
-                                            const endTimeVal = e.target.value;
-                                            let autoStartTime = formData.schedule.start_time;
-                                            let autoScheduleTime = formData.scheduled_at;
-
-                                            if (endTimeVal) {
-                                                const endDate = new Date(endTimeVal);
-                                                if (!isNaN(endDate.getTime())) {
-                                                    // 1. Set Start Time to 30 mins before End Time
-                                                    const startDate = new Date(endDate.getTime() - 30 * 60000);
-                                                    autoStartTime = formatDateTimeLocal(startDate);
-
-                                                    // 2. Set Schedule Send Time to 30 mins before the NEW Start Time
-                                                    const scheduleDate = new Date(startDate.getTime() - 30 * 60000);
-                                                    autoScheduleTime = formatDateTimeLocal(scheduleDate);
-                                                }
-                                            }
-
-                                            setFormData({
-                                                ...formData,
-                                                schedule: {
-                                                    ...formData.schedule,
-                                                    end_time: endTimeVal,
-                                                    start_time: autoStartTime
-                                                },
-                                                scheduled_at: autoScheduleTime
-                                            });
-                                        }}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            schedule: { ...formData.schedule, end_time: e.target.value }
+                                        })}
                                         className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
                                     />
                                 </div>
