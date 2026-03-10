@@ -310,7 +310,8 @@ export default function DownTimeSender() {
                     if (autoReleaseNote && formData.schedule.end_time) {
                         try {
                             const endTimeDate = new Date(formData.schedule.end_time);
-                            const releaseNoteScheduledAt = new Date(endTimeDate.getTime() + 10 * 60000);
+                            // Set Release Note to be sent 2 minutes after End Time
+                            const releaseNoteScheduledAt = new Date(endTimeDate.getTime() + 2 * 60000);
 
                             const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
 
@@ -332,7 +333,7 @@ export default function DownTimeSender() {
 
                 const successMsg = isEditing
                     ? "Notification updated successfully! 🔄"
-                    : (immediate ? response.message : (autoReleaseNote ? "Downtime & Release Note scheduled! 🚀" : "Scheduled set successfully"));
+                    : (immediate ? response.message : (autoReleaseNote ? "Downtime alert & Release Note (in 2m) scheduled! 🚀" : "Scheduled successfully"));
 
                 toast.success(successMsg);
                 if (activeTab !== 'history') {
