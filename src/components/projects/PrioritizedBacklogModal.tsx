@@ -37,6 +37,8 @@ export default function PrioritizedBacklogModal({
     const [activeTab, setActiveTab] = useState<'prioritized' | 'available'>('prioritized');
     const [sprintId, setSprintId] = useState<number | null>(null);
     const [automationApproval, setAutomationApproval] = useState<any>(null);
+    const [addingItemId, setAddingItemId] = useState<string | null>(null);
+    const [removingItemId, setRemovingItemId] = useState<string | null>(null);
 
     const isLocked = !!automationApproval?.backlog_prioritize;
     const canChangeApproval = isLocked && !automationApproval?.split_tasks && !automationApproval?.assign_tasks;
@@ -184,6 +186,7 @@ export default function PrioritizedBacklogModal({
     };
 
     const handleAddToPriority = async (backlogId: string) => {
+        setAddingItemId(backlogId);
         try {
             const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -210,10 +213,13 @@ export default function PrioritizedBacklogModal({
         } catch (error) {
             console.error('Error adding item:', error);
             ToastService.showError('Failed to add item to priority');
+        } finally {
+            setAddingItemId(null);
         }
     };
 
     const handleRemoveFromPriority = async (backlogId: string) => {
+        setRemovingItemId(backlogId);
         try {
             const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state.accessToken;
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -239,6 +245,8 @@ export default function PrioritizedBacklogModal({
         } catch (error) {
             console.error('Error removing item:', error);
             ToastService.showError('Failed to remove item');
+        } finally {
+            setRemovingItemId(null);
         }
     };
 
@@ -409,21 +417,37 @@ export default function PrioritizedBacklogModal({
                 <div className="flex-shrink-0">
                     {isPrioritized ? (
                         <button
-                            onClick={() => !isLocked && handleRemoveFromPriority(item.backlog_id)}
-                            disabled={isLocked}
-                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isLocked ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-red-600 border-red-600 hover:bg-red-50'}`}
+                            onClick={() => !isLocked && !removingItemId && handleRemoveFromPriority(item.backlog_id)}
+                            disabled={isLocked || removingItemId === item.backlog_id}
+                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center gap-1 ${isLocked || removingItemId === item.backlog_id ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-red-600 border-red-600 hover:bg-red-50'}`}
                             title={isLocked ? "Approval active - cannot remove" : "Remove from priority"}
                         >
-                            Remove
+                            {removingItemId === item.backlog_id ? (
+                                <>
+                                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Removing...
+                                </>
+                            ) : 'Remove'}
                         </button>
                     ) : (
                         <button
-                            onClick={() => !isLocked && handleAddToPriority(item.backlog_id)}
-                            disabled={isLocked}
-                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isLocked ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-blue-600 border-blue-600 hover:bg-blue-50'}`}
+                            onClick={() => !isLocked && !addingItemId && handleAddToPriority(item.backlog_id)}
+                            disabled={isLocked || addingItemId === item.backlog_id}
+                            className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center gap-1 ${isLocked || addingItemId === item.backlog_id ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-blue-600 border-blue-600 hover:bg-blue-50'}`}
                             title={isLocked ? "Approval active - cannot add" : "Add to priority"}
                         >
-                            Add
+                            {addingItemId === item.backlog_id ? (
+                                <>
+                                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Adding...
+                                </>
+                            ) : 'Add'}
                         </button>
                     )}
                 </div>
