@@ -8,10 +8,11 @@ import { useUser, useTenant } from '@/lib/store/auth.store';
 interface DashboardLayoutProps {
   children: React.ReactNode;
   mainClassName?: string;
+  showSidebar?: boolean;
 }
 
 
-export default function DashboardLayout({ children, mainClassName }: Readonly<DashboardLayoutProps>) {
+export default function DashboardLayout({ children, mainClassName, showSidebar = true }: Readonly<DashboardLayoutProps>) {
   const { logout } = useAuth();
   const user = useUser();
   const tenant = useTenant();
@@ -85,11 +86,11 @@ export default function DashboardLayout({ children, mainClassName }: Readonly<Da
 
       {/* Sidebar - Below Navbar */}
       <div className="flex pt-16">
-        <Sidebar />
+        {showSidebar && <Sidebar />}
 
         {/* Main Content */}
 
-        <main className={`flex-1 ml-64 p-8 ${mainClassName || ''}`}>
+        <main className={`flex-1 ${showSidebar ? 'ml-64' : ''} p-8 ${mainClassName || ''}`}>
           {children}
         </main>
       </div>

@@ -9,7 +9,7 @@ export const metadata = {
 
 export default function ProjectEventsPage() {
     return (
-        <DashboardLayout>
+        <DashboardLayout showSidebar={true}>
             <Suspense fallback={<div className="flex justify-center items-center h-screen animate-pulse text-blue-600 font-bold">Loading AjileMind Events...</div>}>
                 <ProjectEventBoard />
             </Suspense>

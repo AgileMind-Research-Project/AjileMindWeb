@@ -38,6 +38,7 @@ interface ExtractedTask {
     effort?: number;
     assignee?: string;
     tags?: string[];
+    meeting_status?: string;
 }
 
 interface ExtractedLeave {
@@ -46,6 +47,13 @@ interface ExtractedLeave {
     leave_hours?: number;
     leave_type?: string;
     reason?: string;
+}
+
+interface ExtractedBug {
+    title: string;
+    reporter?: string;
+    severity?: string;
+    description?: string;
 }
 
 interface ProjectUser {
@@ -97,7 +105,7 @@ export default function ProjectEventBoard() {
     const [editedContent, setEditedContent] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
-    const [extractedData, setExtractedData] = useState<{ tasks: ExtractedTask[], leave_info: ExtractedLeave[] } | null>(null);
+    const [extractedData, setExtractedData] = useState<{ tasks: ExtractedTask[], leave_info: ExtractedLeave[], bugs: ExtractedBug[] } | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null);
@@ -106,6 +114,7 @@ export default function ProjectEventBoard() {
     const [taskEditStates, setTaskEditStates] = useState<Record<number, TaskEditState>>({});
     const [tasksSynced, setTasksSynced] = useState(false);
     const [leavesSynced, setLeavesSynced] = useState(false);
+    const [bugsSynced, setBugsSynced] = useState(false);
     const [expandedLeaveIdx, setExpandedLeaveIdx] = useState<number | null>(null);
     const [leaveEditStates, setLeaveEditStates] = useState<Record<number, LeaveEditState>>({});
 
@@ -242,14 +251,16 @@ export default function ProjectEventBoard() {
                 setExtractedData(null);
                 setIsTranscriptExpanded(false);
                 setIsEditing(false);
+                // Always run analysis — backend fetches transcript independently
+                autoRunAnalysis(selectedMeetingId);
                 try {
                     const res = await fetchWithAuth(`${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/transcripts`);
                     if (res.ok) {
                         const data = await res.json();
-                        setTranscript(data.data);
-                        setEditedContent(data.data.content || '');
-                        // Auto-run task analysis after transcript loads
-                        autoRunAnalysis(selectedMeetingId);
+                        if (data?.data) {
+                            setTranscript(data.data);
+                            setEditedContent(data.data?.content || '');
+                        }
                     }
                 } catch (err) {
                     console.error('Failed to fetch transcript', err);
@@ -260,6 +271,9 @@ export default function ProjectEventBoard() {
             setTranscript(null);
             setEditedContent('');
             setExtractedData(null);
+            setTasksSynced(false);
+            setLeavesSynced(false);
+            setBugsSynced(false);
         }
     }, [selectedMeetingId, fetchWithAuth]);
 
@@ -283,13 +297,33 @@ export default function ProjectEventBoard() {
         }
     };
 
+    const isSprintReview = selectedCategory === 'Sprint Review';
+
+    const cleanAnalysisData = (data: any) => {
+        const review = selectedCategory === 'Sprint Review';
+        // Sprint Review: filter tasks with no summary OR no assignee (junk/placeholder rows)
+        // Sprint Planning: only filter tasks with no summary (assignees may be unset for new tasks)
+        const validTasks = (data.tasks || []).filter((t: ExtractedTask) => {
+            if (!t.summary || t.summary.trim() === '') return false;
+            if (review && (!t.assignee || t.assignee.trim() === '')) return false;
+            return true;
+        });
+        // Filter out placeholder/no-bug messages (only relevant for Sprint Review)
+        const validBugs = review
+            ? (data.bugs || []).filter((b: ExtractedBug) =>
+                b.title && !b.title.toLowerCase().includes('no bugs') && !b.title.toLowerCase().includes('no bug found')
+            )
+            : [];
+        return { tasks: validTasks, leave_info: data.leave_info || [], bugs: validBugs };
+    };
+
     const autoRunAnalysis = async (meetingId: string) => {
         setIsAnalyzing(true);
         try {
             const res = await fetchWithAuth(`${API_CONFIG.baseURL}/api/v1/meetings/${meetingId}/analyze-tasks`, { method: 'POST' });
             if (res.ok) {
                 const data = await res.json();
-                setExtractedData(data);
+                setExtractedData(cleanAnalysisData(data));
             }
         } catch (err) {
             console.error('Auto-analysis failed', err);
@@ -305,7 +339,7 @@ export default function ProjectEventBoard() {
             const res = await fetchWithAuth(`${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/analyze-tasks`, { method: 'POST' });
             if (res.ok) {
                 const data = await res.json();
-                setExtractedData(data);
+                setExtractedData(cleanAnalysisData(data));
             }
         } catch (err) {
             console.error('Failed to analyze transcript', err);
@@ -318,53 +352,97 @@ export default function ProjectEventBoard() {
         if (!selectedMeetingId || !extractedData || extractedData.tasks.length === 0) return;
         setIsSyncing(true);
         try {
-            // Collect task IDs from the extracted (and possibly edited) task list
-            const taskIds = extractedData.tasks
-                .map(t => t.task_id)
-                .filter((id): id is string => Boolean(id));
-
-            const res = await fetchWithAuth(`${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/sync-tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tasks: extractedData.tasks,
-                    project_id: selectedProjectId,
-                    sprint_id: selectedSprintId
-                }),
-            });
-            if (res.ok) {
+            if (isSprintReview) {
+                // ── Sprint Review: update statuses + close sprint ──────────────
+                // 1. Send tasks to sync-review-tasks (Completed → done in Jira/DB, others unchanged)
+                const reviewRes = await fetchWithAuth(
+                    `${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/sync-review-tasks`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tasks: extractedData.tasks,
+                            project_id: selectedProjectId,
+                            sprint_id: selectedSprintId,
+                        }),
+                    }
+                );
+                if (!reviewRes.ok) {
+                    throw new Error('Failed to sync review task statuses');
+                }
                 setTasksSynced(true);
 
-                // Start the sprint: sets status='Active', start_date=today,
-                // end_date=today + project.sprint_size weeks — all in one backend call.
+                // 2. Close the sprint in Jira + mark DB status = 'Completed'
                 if (selectedProjectId && selectedSprintId) {
                     try {
-                        const startRes = await fetchWithAuth(
-                            `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/${selectedSprintId}/start`,
-                            {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ task_ids: taskIds }),
-                            }
+                        const closeRes = await fetchWithAuth(
+                            `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/${selectedSprintId}/close`,
+                            { method: 'POST' }
                         );
-                        if (startRes.ok) {
-                            const startData = await startRes.json();
-                            const updatedSprint = startData?.data;
+                        if (closeRes.ok) {
+                            const closeData = await closeRes.json();
+                            const updatedSprint = closeData?.data;
                             setSprints(prev =>
                                 prev.map(s =>
                                     s.sprint_id === selectedSprintId
-                                        ? {
-                                            ...s,
-                                            sprint_status: updatedSprint?.sprint_status ?? 'Active',
-                                            start_date: updatedSprint?.start_date ?? s.start_date,
-                                            end_date: updatedSprint?.end_date ?? s.end_date,
-                                        }
+                                        ? { ...s, sprint_status: updatedSprint?.sprint_status ?? 'Closed' }
                                         : s
                                 )
                             );
                         }
                     } catch {
-                        // non-fatal — tasks were already synced successfully
+                        // non-fatal — statuses were already updated
+                    }
+                }
+            } else {
+                // ── Sprint Planning: original flow — sync tasks + start sprint ──
+                const taskIds = extractedData.tasks
+                    .map(t => t.task_id)
+                    .filter((id): id is string => Boolean(id));
+
+                const res = await fetchWithAuth(
+                    `${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/sync-tasks`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tasks: extractedData.tasks,
+                            project_id: selectedProjectId,
+                            sprint_id: selectedSprintId,
+                        }),
+                    }
+                );
+                if (res.ok) {
+                    setTasksSynced(true);
+                    if (selectedProjectId && selectedSprintId) {
+                        try {
+                            const startRes = await fetchWithAuth(
+                                `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/${selectedSprintId}/start`,
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ task_ids: taskIds }),
+                                }
+                            );
+                            if (startRes.ok) {
+                                const startData = await startRes.json();
+                                const updatedSprint = startData?.data;
+                                setSprints(prev =>
+                                    prev.map(s =>
+                                        s.sprint_id === selectedSprintId
+                                            ? {
+                                                ...s,
+                                                sprint_status: updatedSprint?.sprint_status ?? 'Active',
+                                                start_date: updatedSprint?.start_date ?? s.start_date,
+                                                end_date: updatedSprint?.end_date ?? s.end_date,
+                                            }
+                                            : s
+                                    )
+                                );
+                            }
+                        } catch {
+                            // non-fatal
+                        }
                     }
                 }
             }
@@ -395,6 +473,30 @@ export default function ProjectEventBoard() {
         } catch (err) {
             console.error('Failed to sync leaves', err);
             alert('Failed to sync leaves');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleSyncBugs = async () => {
+        if (!selectedMeetingId || !extractedData || (extractedData.bugs || []).length === 0) return;
+        setIsSyncing(true);
+        try {
+            const res = await fetchWithAuth(`${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/sync-bugs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bugs: extractedData.bugs,
+                    project_id: selectedProjectId,
+                    sprint_id: selectedSprintId,
+                }),
+            });
+            if (res.ok) {
+                setBugsSynced(true);
+            }
+        } catch (err) {
+            console.error('Failed to sync bugs', err);
+            alert('Failed to save bugs to database');
         } finally {
             setIsSyncing(false);
         }
@@ -442,6 +544,13 @@ export default function ProjectEventBoard() {
     };
 
     const discardLeaveEdit = (idx: number) => {
+        setExtractedData(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                leave_info: prev.leave_info.filter((_, i) => i !== idx)
+            };
+        });
         setExpandedLeaveIdx(null);
     };
 
@@ -478,11 +587,13 @@ export default function ProjectEventBoard() {
     };
 
     const discardTaskEdit = (idx: number) => {
-        const task = extractedData?.tasks[idx];
-        setTaskEditStates(prev => ({
-            ...prev,
-            [idx]: { ...prev[idx], editTaskId: task?.task_id ?? '', editEffort: task?.effort != null ? String(task.effort) : '', editAssignee: task?.assignee ?? '' },
-        }));
+        setExtractedData(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                tasks: prev.tasks.filter((_, i) => i !== idx)
+            };
+        });
         setExpandedTaskIdx(null);
     };
 
@@ -637,9 +748,10 @@ export default function ProjectEventBoard() {
                                     <div className="flex justify-center items-center h-64">
                                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                                     </div>
-                                ) : transcript ? (
+                                ) : selectedMeetingId ? (
                                     <div className="space-y-6">
-                                        {/* Transcript header — always visible */}
+                                        {/* Transcript header + collapsible — only when transcript is available */}
+                                        {transcript && (<>
                                         <div className="flex justify-between items-center border-b pb-4">
                                             <div>
                                                 <div className="text-[10px] font-black text-blue-500 uppercase flex items-center gap-1 mb-1">
@@ -756,30 +868,39 @@ export default function ProjectEventBoard() {
                                             )}
                                         </div>
 
+                                        {/* End of transcript section */}
+                                        </>)}
+
                                         {/* Full-panel spinner while analysis runs */}
                                         {isAnalyzing && (
                                             <div className="flex flex-col items-center justify-center py-16 gap-4">
                                                 <div className="animate-spin rounded-full h-14 w-14 border-4 border-purple-200 border-t-purple-600"></div>
                                                 <p className="text-purple-700 font-semibold">Running AI Analysis…</p>
-                                                <p className="text-gray-400 text-sm">Extracting tasks and leave information</p>
+                                                <p className="text-gray-400 text-sm">{isSprintReview ? 'Analysing Sprint Review transcript…' : 'Extracting tasks and leave information'}</p>
                                             </div>
                                         )}
 
                                         {/* Extracted Data View */}
                                         {!isAnalyzing && extractedData && (
                                             <div className="mt-4 space-y-8 animate-fadeIn border-t pt-8">
-                                                <div className="flex justify-between items-end">
+                                                <div className="flex justify-between items-end flex-wrap gap-3">
                                                     <div>
                                                         <h4 className="text-xl font-extrabold text-gray-900">AI Analysis Results</h4>
-                                                        <p className="text-sm text-gray-500">Extracted tasks, leave info, and team sentiment from the transcript.</p>
+                                                        <p className="text-sm text-gray-500">
+                                                            {isSprintReview
+                                                                ? `Sprint Review · ${extractedData.tasks.length} tasks · ${(extractedData.bugs || []).length} bug${(extractedData.bugs || []).length !== 1 ? 's' : ''} detected`
+                                                                : 'Extracted tasks, leave info, and team sentiment from the transcript.'}
+                                                        </p>
                                                     </div>
                                                     {extractedData && (
-                                                        <div className="flex gap-3">
-                                                            {/* Sync Tasks — disables + shows badge after sync + activates sprint */}
+                                                        <div className="flex gap-3 flex-wrap">
+                                                            {/* Sync Tasks */}
                                                             {tasksSynced ? (
                                                                 <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-50 border border-blue-200">
                                                                     <span className="text-blue-700 font-bold text-sm">✓ Tasks Synced</span>
-                                                                    <span className="text-[11px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">Sprint Active</span>
+                                                                    {isSprintReview
+                                                                        ? <span className="text-[11px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">Sprint Closed</span>
+                                                                        : <span className="text-[11px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">Sprint Active</span>}
                                                                 </div>
                                                             ) : (
                                                                 <button
@@ -788,37 +909,56 @@ export default function ProjectEventBoard() {
                                                                     className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700 disabled:bg-gray-300 shadow-lg shadow-blue-100 transition-all flex items-center gap-2"
                                                                 >
                                                                     {isSyncing ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div> : '🚀'}
-                                                                    Sync Tasks to Jira/DB
+                                                                    {isSprintReview ? 'Save Review Results' : 'Sync Tasks to Jira/DB'}
                                                                 </button>
                                                             )}
 
-                                                            {/* Sync Leaves — disables permanently after first successful click */}
-                                                            {leavesSynced ? (
-                                                                <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-50 border border-green-200">
-                                                                    <span className="text-green-700 font-bold text-sm">✓ Leaves Saved to Database</span>
-                                                                </div>
+                                                            {/* Sprint Review: Sync Bugs | Planning: Sync Leaves */}
+                                                            {isSprintReview ? (
+                                                                (extractedData.bugs || []).length > 0 && (
+                                                                    bugsSynced ? (
+                                                                        <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-50 border border-red-200">
+                                                                            <span className="text-red-700 font-bold text-sm">✓ Bugs Saved to Database</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={handleSyncBugs}
+                                                                            disabled={isSyncing}
+                                                                            className="bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-red-700 disabled:bg-gray-300 shadow-lg shadow-red-100 transition-all flex items-center gap-2"
+                                                                        >
+                                                                            {isSyncing ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div> : '🐛'}
+                                                                            Save Bugs to DB
+                                                                        </button>
+                                                                    )
+                                                                )
                                                             ) : (
-                                                                <button
-                                                                    onClick={handleSyncLeaves}
-                                                                    disabled={isSyncing || extractedData.leave_info.length === 0}
-                                                                    className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-green-700 disabled:bg-gray-300 shadow-lg shadow-green-100 transition-all flex items-center gap-2"
-                                                                >
-                                                                    {isSyncing ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div> : '💾'}
-                                                                    Sync Leaves to DB
-                                                                </button>
+                                                                leavesSynced ? (
+                                                                    <div className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-50 border border-green-200">
+                                                                        <span className="text-green-700 font-bold text-sm">✓ Leaves Saved to Database</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={handleSyncLeaves}
+                                                                        disabled={isSyncing || extractedData.leave_info.length === 0}
+                                                                        className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-green-700 disabled:bg-gray-300 shadow-lg shadow-green-100 transition-all flex items-center gap-2"
+                                                                    >
+                                                                        {isSyncing ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div> : '💾'}
+                                                                        Sync Leaves to DB
+                                                                    </button>
+                                                                )
                                                             )}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Tasks + Leave grid */}
+                                                {/* Tasks + Right-panel grid */}
                                                 {extractedData && (
                                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                                         {/* ── Tasks Section ── */}
                                                         <div className="space-y-3">
                                                             <h5 className="font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wider text-xs">
                                                                 <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                                                                Detected Tasks ({extractedData.tasks.length})
+                                                                {isSprintReview ? 'Sprint Review Tasks' : 'Detected Tasks'} ({extractedData.tasks.length})
                                                             </h5>
                                                             <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                                                                 {extractedData.tasks.length === 0 ? (
@@ -861,12 +1001,39 @@ export default function ProjectEventBoard() {
                                                                                             <span className="text-xs text-gray-500 hidden sm:inline max-w-[90px] truncate">{task.assignee || 'Unassigned'}</span>
                                                                                         </div>
 
-                                                                                        {/* Effort badge */}
-                                                                                        {task.effort != null && (
+                                                                                        {/* Sprint Review: editable meeting_status dropdown | Planning: effort badge */}
+                                                                                        {isSprintReview ? (
+                                                                                            <select
+                                                                                                value={task.meeting_status || 'Incomplete'}
+                                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                                onChange={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    const newStatus = e.target.value;
+                                                                                                    setExtractedData(prev => {
+                                                                                                        if (!prev) return prev;
+                                                                                                        const tasks = prev.tasks.map((t, i) =>
+                                                                                                            i === idx ? { ...t, meeting_status: newStatus } : t
+                                                                                                        );
+                                                                                                        return { ...prev, tasks };
+                                                                                                    });
+                                                                                                }}
+                                                                                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 cursor-pointer outline-none border-0 appearance-none ${
+                                                                                                    task.meeting_status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                                                                                    task.meeting_status === 'Partially Complete' ? 'bg-amber-100 text-amber-700' :
+                                                                                                    task.meeting_status === 'Moved to Next Sprint' ? 'bg-purple-100 text-purple-700' :
+                                                                                                    'bg-red-100 text-red-700'
+                                                                                                }`}
+                                                                                            >
+                                                                                                <option value="Completed">Completed</option>
+                                                                                                <option value="Partially Complete">Partially Complete</option>
+                                                                                                <option value="Incomplete">Incomplete</option>
+                                                                                                <option value="Moved to Next Sprint">Moved to Next Sprint</option>
+                                                                                            </select>
+                                                                                        ) : task.effort != null ? (
                                                                                             <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded whitespace-nowrap shrink-0">
                                                                                                 ⏱ {task.effort}h
                                                                                             </span>
-                                                                                        )}
+                                                                                        ) : null}
                                                                                     </button>
 
                                                                                     {/* Expanded detail panel */}
@@ -881,6 +1048,26 @@ export default function ProjectEventBoard() {
                                                                                                     </div>
                                                                                                 ) : (
                                                                                                     <>
+                                                                                                        {/* For Sprint Review: show meeting_status prominently */}
+                                                                                                        {isSprintReview && task.meeting_status && (
+                                                                                                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                                                                                                                task.meeting_status === 'Completed' ? 'bg-green-50 border border-green-200' :
+                                                                                                                task.meeting_status === 'Partially Complete' ? 'bg-amber-50 border border-amber-200' :
+                                                                                                                task.meeting_status === 'Moved to Next Sprint' ? 'bg-purple-50 border border-purple-200' :
+                                                                                                                'bg-red-50 border border-red-200'
+                                                                                                            }`}>
+                                                                                                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Review Status:</span>
+                                                                                                                <span className={`text-sm font-bold ${
+                                                                                                                    task.meeting_status === 'Completed' ? 'text-green-700' :
+                                                                                                                    task.meeting_status === 'Partially Complete' ? 'text-amber-700' :
+                                                                                                                    task.meeting_status === 'Moved to Next Sprint' ? 'text-purple-700' :
+                                                                                                                    'text-red-700'
+                                                                                                                }`}>
+                                                                                                                    {task.meeting_status === 'Completed' ? '✓' : task.meeting_status === 'Partially Complete' ? '◑' : task.meeting_status === 'Moved to Next Sprint' ? '→' : '✗'} {task.meeting_status}
+                                                                                                                </span>
+                                                                                                            </div>
+                                                                                                        )}
+
                                                                                                         {/* Description */}
                                                                                                         <div>
                                                                                                             <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1">Description</p>
@@ -932,7 +1119,7 @@ export default function ProjectEventBoard() {
                                                                                                         )}
 
                                                                                                         {/* ── Edit fields ── */}
-                                                                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-blue-200">
+                                                                                                        <div className={`grid grid-cols-1 gap-3 pt-3 border-t border-blue-200 ${isSprintReview ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                                                                                                             {/* Task ID */}
                                                                                                             <div>
                                                                                                                 <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Task ID</label>
@@ -945,19 +1132,21 @@ export default function ProjectEventBoard() {
                                                                                                                 />
                                                                                                             </div>
 
-                                                                                                            {/* Estimated Hours */}
-                                                                                                            <div>
-                                                                                                                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Estimated Hours</label>
-                                                                                                                <input
-                                                                                                                    type="number"
-                                                                                                                    min={0}
-                                                                                                                    step={0.5}
-                                                                                                                    value={ts?.editEffort ?? (task.effort != null ? String(task.effort) : '')}
-                                                                                                                    onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editEffort: e.target.value } }))}
-                                                                                                                    placeholder="e.g. 4"
-                                                                                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                                                                />
-                                                                                                            </div>
+                                                                                                            {/* Estimated Hours — hidden for Sprint Review (effort is always 0) */}
+                                                                                                            {!isSprintReview && (
+                                                                                                                <div>
+                                                                                                                    <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 block">Estimated Hours</label>
+                                                                                                                    <input
+                                                                                                                        type="number"
+                                                                                                                        min={0}
+                                                                                                                        step={0.5}
+                                                                                                                        value={ts?.editEffort ?? (task.effort != null ? String(task.effort) : '')}
+                                                                                                                        onChange={(e) => setTaskEditStates(prev => ({ ...prev, [idx]: { ...prev[idx], editEffort: e.target.value } }))}
+                                                                                                                        placeholder="e.g. 4"
+                                                                                                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                                                                    />
+                                                                                                                </div>
+                                                                                                            )}
 
                                                                                                             {/* Assignee */}
                                                                                                             <div>
@@ -1017,8 +1206,46 @@ export default function ProjectEventBoard() {
                                                             </div>
                                                         </div>
 
-                                                        {/* ── Leave Section ── */}
+                                                        {/* ── Right Panel: Bugs (Sprint Review) or Leave (Planning) ── */}
                                                         <div className="space-y-3">
+                                                            {isSprintReview ? (
+                                                                <>
+                                                                    <h5 className="font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wider text-xs">
+                                                                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                                                                        Bugs Found in Sprint ({(extractedData.bugs || []).length})
+                                                                    </h5>
+                                                                    <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                                                                        {(extractedData.bugs || []).length === 0 ? (
+                                                                            <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400">
+                                                                                <span className="text-3xl">✅</span>
+                                                                                <p className="text-sm italic">No bugs reported in this sprint.</p>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="divide-y divide-gray-100 overflow-y-auto max-h-[560px] custom-scrollbar">
+                                                                                {(extractedData.bugs || []).map((bug, bi) => (
+                                                                                    <div key={bi} className="bg-white px-4 py-3 space-y-1">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                                                                                bug.severity === 'High' ? 'bg-red-100 text-red-700' :
+                                                                                                bug.severity === 'Low' ? 'bg-green-100 text-green-700' :
+                                                                                                'bg-amber-100 text-amber-700'
+                                                                                            }`}>{bug.severity || 'Medium'}</span>
+                                                                                            <span className="text-sm font-semibold text-gray-800 flex-1">{bug.title}</span>
+                                                                                        </div>
+                                                                                        {bug.reporter && (
+                                                                                            <p className="text-xs text-gray-400 pl-1">Reported by: {bug.reporter}</p>
+                                                                                        )}
+                                                                                        {bug.description && (
+                                                                                            <p className="text-sm text-gray-600 leading-relaxed pl-1">{bug.description}</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
                                                             <h5 className="font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wider text-xs">
                                                                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                                                                 Developer Leave Info ({extractedData.leave_info.length})
@@ -1048,11 +1275,11 @@ export default function ProjectEventBoard() {
 
                                                                                         {/* Avatar */}
                                                                                         <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 text-sm font-bold flex items-center justify-center shrink-0">
-                                                                                            {leave.developer_name[0].toUpperCase()}
+                                                                                            {leave.developer_name ? leave.developer_name[0].toUpperCase() : '?'}
                                                                                         </div>
 
                                                                                         {/* Name */}
-                                                                                        <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{leave.developer_name}</span>
+                                                                                        <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{leave.developer_name || 'Unknown'}</span>
 
                                                                                         {/* Leave type badge */}
                                                                                         {leave.leave_type && (
@@ -1176,15 +1403,19 @@ export default function ProjectEventBoard() {
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
-                                    </div>
-                                ) : selectedMeetingId ? (
-                                    <div className="text-center py-20 bg-yellow-50 rounded-2xl border border-yellow-100">
-                                        <p className="text-yellow-700">No transcript available for this meeting yet.</p>
+                                        {/* No data fallback — shown when not analyzing and no data yet */}
+                                        {!isAnalyzing && !extractedData && (
+                                            <div className="text-center py-20 bg-yellow-50 rounded-2xl border border-yellow-100">
+                                                <p className="text-yellow-700">No transcript available for this meeting yet.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="text-center py-20">
