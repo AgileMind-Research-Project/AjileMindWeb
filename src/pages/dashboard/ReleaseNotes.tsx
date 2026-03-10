@@ -18,7 +18,8 @@ import {
     Clock,
     User,
     ArrowRight,
-    LifeBuoy
+    LifeBuoy,
+    Edit3
 } from 'lucide-react';
 
 const ReleaseNotes: React.FC = () => {
@@ -61,6 +62,16 @@ const ReleaseNotes: React.FC = () => {
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
     const [lastVersion, setLastVersion] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+    const [newItemInputs, setNewItemInputs] = useState<Record<string, string>>({
+        features: '',
+        bug_fixes: '',
+        improvements: '',
+        breaking_changes: '',
+        known_issues: ''
+    });
+    const [editingItem, setEditingItem] = useState<{ category: string, index: number, value: string } | null>(null);
 
     useEffect(() => {
         if (formData.project_id) {
@@ -128,7 +139,7 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
-    const handleCreate = async () => {
+    const handleSubmit = async () => {
         if (!formData.project_id || !formData.version || !formData.title) {
             toast.error('Please fill in all required fields');
             return;
@@ -136,18 +147,73 @@ const ReleaseNotes: React.FC = () => {
 
         setLoading(true);
         try {
-            await releaseNotesApi.create(formData);
-            toast.success('Release note created successfully');
+            if (isEditing && currentNoteId) {
+                // Ensure we don't send project_id for update
+                const { project_id, ...updateData } = formData;
+                await releaseNotesApi.update(currentNoteId, updateData);
+                toast.success('Release note updated successfully');
+            } else {
+                await releaseNotesApi.create(formData);
+                toast.success('Release note created successfully');
+            }
             setShowModal(false);
             resetForm();
             loadReleaseNotes();
         } catch (error: any) {
-            toast.error(error.response?.data?.detail || 'Failed to create release note');
+            console.error(`Error ${isEditing ? 'updating' : 'creating'} release note:`, error);
+
+            // Better error message handling for validation errors
+            let errorMessage = `Failed to ${isEditing ? 'update' : 'create'} release note`;
+            if (error.response?.data?.detail) {
+                const detail = error.response.data.detail;
+                if (Array.isArray(detail)) {
+                    errorMessage = detail.map(err => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ');
+                } else {
+                    errorMessage = detail;
+                }
+            }
+
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
+    const handleEdit = (note: ReleaseNote) => {
+        setIsEditing(true);
+        setCurrentNoteId(note.id);
+        setFormData({
+            project_id: note.project_id,
+            version: note.version,
+            title: note.title,
+            release_date: note.release_date,
+            release_type: note.release_type as any,
+            start_sprint: (note as any).start_sprint || null,
+            end_sprint: (note as any).end_sprint || null,
+            content: note.content,
+            summary: note.summary || ''
+        });
+        setHasGeneratedContent(true);
+        setShowModal(true);
+    };
+
+    const handleUpdateContent = (category: keyof ReleaseNoteContent, action: 'add' | 'remove' | 'edit', index?: number, value?: string) => {
+        setFormData(prev => {
+            const updatedContent = { ...prev.content };
+            const list = [...(updatedContent[category] || [])];
+
+            if (action === 'add' && value) {
+                list.push(value);
+            } else if (action === 'remove' && index !== undefined) {
+                list.splice(index, 1);
+            } else if (action === 'edit' && index !== undefined && value !== undefined) {
+                list[index] = value;
+            }
+
+            updatedContent[category] = list;
+            return { ...prev, content: updatedContent };
+        });
+    };
     const generateAIContent = async (targetFormData: typeof formData) => {
         if (!targetFormData.project_id || (!targetFormData.start_sprint && !targetFormData.end_sprint)) {
             toast.error('Please select a project and sprint range');
@@ -271,6 +337,8 @@ const ReleaseNotes: React.FC = () => {
         };
 
         setFormData(initialFormData);
+        setIsEditing(false);
+        setCurrentNoteId(null);
         setShowModal(true);
     };
 
@@ -368,6 +436,8 @@ const ReleaseNotes: React.FC = () => {
             summary: ''
         });
         setHasGeneratedContent(false);
+        setIsEditing(false);
+        setCurrentNoteId(null);
     };
 
     return (
@@ -592,6 +662,13 @@ const ReleaseNotes: React.FC = () => {
                                                 >
                                                     👁️
                                                 </button>
+                                                <button
+                                                    onClick={() => handleEdit(note)}
+                                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                                    title="Edit Note"
+                                                >
+                                                    <Edit3 size={16} />
+                                                </button>
                                                 {note.status === 'DRAFT' && (
                                                     <button
                                                         onClick={() => handlePublish(note.id)}
@@ -623,7 +700,7 @@ const ReleaseNotes: React.FC = () => {
                     <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         {/* Modal Header */}
                         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-20">
-                            <h2 className="text-xl font-bold text-gray-900">Create Release Note</h2>
+                            <h2 className="text-xl font-bold text-gray-900">{isEditing ? 'Edit Release Note' : 'Create Release Note'}</h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                         </div>
                         {/* Modal Body */}
@@ -776,83 +853,139 @@ const ReleaseNotes: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Generated Content Display */}
-                            {hasGeneratedContent && (
+                            {/* Manual & AI Content Section */}
+                            {formData.project_id > 0 && (
                                 <div className="space-y-6">
-                                    {/* New Features */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">✨ New Features</label>
-                                        {formData.content.features.length > 0 ? (
-                                            <div className="bg-blue-50 rounded-lg p-4">
-                                                <ul className="space-y-2">
-                                                    {formData.content.features.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-blue-800">
-                                                            <span className="text-blue-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                                    {(['features', 'bug_fixes', 'improvements', 'breaking_changes', 'known_issues'] as const).map((category) => (
+                                        <div key={category} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                                            <div className={`px-4 py-2 flex justify-between items-center ${category === 'features' ? 'bg-blue-50/50' :
+                                                category === 'bug_fixes' ? 'bg-green-50/50' :
+                                                    category === 'breaking_changes' ? 'bg-amber-50/50' :
+                                                        category === 'known_issues' ? 'bg-gray-50/50' :
+                                                            'bg-purple-50/50'
+                                                }`}>
+                                                <label className="text-sm font-bold text-gray-800 capitalize flex items-center gap-2">
+                                                    {category === 'features' ? '✨ New Features' :
+                                                        category === 'bug_fixes' ? '🐛 Bug Fixes' :
+                                                            category === 'improvements' ? '⚡ Improvements' :
+                                                                category === 'breaking_changes' ? '⚠️ Breaking Changes' :
+                                                                    '🔍 Known Issues'}
+                                                    <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-gray-200 font-bold ml-1">
+                                                        {formData.content[category].length}
+                                                    </span>
+                                                </label>
                                             </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No new features found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
 
-                                    {/* Bug Fixes */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">🐛 Bug Fixes</label>
-                                        {formData.content.bug_fixes.length > 0 ? (
-                                            <div className="bg-green-50 rounded-lg p-4">
-                                                <ul className="space-y-2">
-                                                    {formData.content.bug_fixes.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-green-800">
-                                                            <span className="text-green-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No bug fixes found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
+                                            <div className="p-4 space-y-3">
+                                                {/* Edit Form */}
+                                                {editingItem && editingItem.category === category ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={editingItem.value}
+                                                            onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                                                            className={`flex-1 px-3 py-1.5 border rounded-lg text-sm outline-none ring-2 ${category === 'breaking_changes' ? 'border-amber-300 ring-amber-100' : 'border-blue-300 ring-blue-100'
+                                                                }`}
+                                                            autoFocus
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                handleUpdateContent(category, 'edit', editingItem.index, editingItem.value);
+                                                                setEditingItem(null);
+                                                            }}
+                                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditingItem(null)}
+                                                            className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder={`Add a new ${category.replace('_', ' ')}...`}
+                                                            value={newItemInputs[category]}
+                                                            onChange={(e) => setNewItemInputs({ ...newItemInputs, [category]: e.target.value })}
+                                                            onKeyPress={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    handleUpdateContent(category, 'add', undefined, newItemInputs[category]);
+                                                                    setNewItemInputs({ ...newItemInputs, [category]: '' });
+                                                                }
+                                                            }}
+                                                            className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                if (newItemInputs[category]) {
+                                                                    handleUpdateContent(category, 'add', undefined, newItemInputs[category]);
+                                                                    setNewItemInputs({ ...newItemInputs, [category]: '' });
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </div>
+                                                )}
 
-                                    {/* Improvements */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">⚡ Improvements</label>
-                                        {formData.content.improvements.length > 0 ? (
-                                            <div className="bg-purple-50 rounded-lg p-4">
+                                                {/* List of Items */}
                                                 <ul className="space-y-2">
-                                                    {formData.content.improvements.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-purple-800">
-                                                            <span className="text-purple-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
+                                                    {formData.content[category].map((item, i) => (
+                                                        <li key={i} className="group flex items-center justify-between gap-3 p-2 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition-all">
+                                                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                                <span className={`${category === 'features' ? 'text-blue-500' :
+                                                                    category === 'bug_fixes' ? 'text-green-500' :
+                                                                        category === 'breaking_changes' ? 'text-amber-500' :
+                                                                            category === 'known_issues' ? 'text-gray-400' :
+                                                                                'text-purple-500'
+                                                                    } mt-1 flex-shrink-0 text-[10px]`}>●</span>
+                                                                <span className="text-sm text-gray-700 break-words leading-relaxed">{item}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => setEditingItem({ category, index: i, value: item })}
+                                                                    className="p-1 px-2 text-[10px] font-bold text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleUpdateContent(category, 'remove', i)}
+                                                                    className="p-1 px-2 text-[10px] font-bold text-red-600 bg-red-50 rounded hover:bg-red-100"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
                                                         </li>
                                                     ))}
+                                                    {formData.content[category].length === 0 && (
+                                                        <div className="py-2 text-center text-gray-400 text-[11px] italic">
+                                                            No items added to this category yet.
+                                                        </div>
+                                                    )}
                                                 </ul>
                                             </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No improvements found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
                         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 z-10">
                             <button onClick={() => setShowModal(false)} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
                             <button
-                                onClick={handleCreate}
-                                disabled={loading || !hasGeneratedContent}
+                                onClick={handleSubmit}
+                                disabled={loading || (!hasGeneratedContent &&
+                                    (formData.content.features?.length || 0) === 0 &&
+                                    (formData.content.bug_fixes?.length || 0) === 0 &&
+                                    (formData.content.improvements?.length || 0) === 0)}
                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={!hasGeneratedContent ? 'Generate AI content first' : ''}
+                                title={(!hasGeneratedContent && (formData.content.features?.length || 0) === 0 && (formData.content.bug_fixes?.length || 0) === 0 && (formData.content.improvements?.length || 0) === 0) ? 'Generate AI content or add items manually' : ''}
                             >
-                                {loading ? 'Creating...' : 'Create Release Note'}
+                                {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Release Note' : 'Create Release Note')}
                             </button>
                         </div>
                     </div>
@@ -1271,7 +1404,7 @@ const ReleaseNotes: React.FC = () => {
                 </div>
             )
             }
-        </div >
+        </div>
     );
 };
 
