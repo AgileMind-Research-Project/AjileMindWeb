@@ -1,29 +1,231 @@
 @import "tailwindcss";
 
+
+/* ============================================
+   AgileMind Design System – CSS Custom Properties
+   ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary */
+  --am-primary: #2563EB;
+  --am-primary-dark: #1D4ED8;
+  --am-primary-darker: #1E40AF;
+  --am-primary-light: #3B82F6;
+  --am-primary-lighter: #60A5FA;
+  --am-primary-50: #EFF6FF;
+  --am-primary-100: #DBEAFE;
+  --am-primary-200: #BFDBFE;
+
+  /* Secondary (Indigo) */
+  --am-secondary: #4F46E5;
+  --am-secondary-dark: #4338CA;
+  --am-secondary-light: #6366F1;
+  --am-secondary-50: #EEF2FF;
+  --am-secondary-100: #E0E7FF;
+
+  /* Accent (Teal) */
+  --am-accent: #14B8A6;
+  --am-accent-dark: #0D9488;
+  --am-accent-light: #2DD4BF;
+  --am-accent-50: #F0FDFA;
+  --am-accent-100: #CCFBF1;
+
+  /* Backgrounds */
+  --am-bg: #F8FAFC;
+  --am-bg-card: #FFFFFF;
+  --am-bg-sidebar: #FFFFFF;
+  --am-bg-navbar: #FFFFFF;
+
+  /* Text */
+  --am-text-primary: #1E293B;
+  --am-text-secondary: #64748B;
+  --am-text-muted: #94A3B8;
+
+  /* Status */
+  --am-success: #22C55E;
+  --am-success-light: #F0FDF4;
+  --am-success-border: #BBF7D0;
+  --am-warning: #F59E0B;
+  --am-warning-light: #FFFBEB;
+  --am-warning-border: #FDE68A;
+  --am-error: #EF4444;
+  --am-error-light: #FEF2F2;
+  --am-error-border: #FECACA;
+
+  /* Borders & Shadows */
+  --am-border: #E2E8F0;
+  --am-border-light: #F1F5F9;
+  --am-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --am-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --am-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --am-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --am-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  /* Hover */
+  --am-hover-bg: #EEF2FF;
+
+  /* Radius */
+  --am-radius: 12px;
+  --am-radius-lg: 16px;
+  --am-radius-sm: 8px;
+
+  /* Foreground/background compatibility */
+  --background: var(--am-bg);
+  --foreground: var(--am-text-primary);
 }
 
+/* Tailwind v4 @theme block for custom tokens */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* AgileMind palette tokens */
+  --color-am-primary: var(--am-primary);
+  --color-am-primary-dark: var(--am-primary-dark);
+  --color-am-primary-light: var(--am-primary-light);
+  --color-am-primary-50: var(--am-primary-50);
+  --color-am-primary-100: var(--am-primary-100);
+  --color-am-primary-200: var(--am-primary-200);
+  --color-am-secondary: var(--am-secondary);
+  --color-am-secondary-dark: var(--am-secondary-dark);
+  --color-am-secondary-light: var(--am-secondary-light);
+  --color-am-secondary-50: var(--am-secondary-50);
+  --color-am-secondary-100: var(--am-secondary-100);
+  --color-am-accent: var(--am-accent);
+  --color-am-accent-dark: var(--am-accent-dark);
+  --color-am-accent-light: var(--am-accent-light);
+  --color-am-accent-50: var(--am-accent-50);
+  --color-am-accent-100: var(--am-accent-100);
+  --color-am-bg: var(--am-bg);
+  --color-am-bg-card: var(--am-bg-card);
+  --color-am-text-primary: var(--am-text-primary);
+  --color-am-text-secondary: var(--am-text-secondary);
+  --color-am-text-muted: var(--am-text-muted);
+  --color-am-success: var(--am-success);
+  --color-am-success-light: var(--am-success-light);
+  --color-am-warning: var(--am-warning);
+  --color-am-warning-light: var(--am-warning-light);
+  --color-am-error: var(--am-error);
+  --color-am-error-light: var(--am-error-light);
+  --color-am-border: var(--am-border);
+  --color-am-hover-bg: var(--am-hover-bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================
+   Base Styles
+   ============================================ */
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--am-bg);
+  color: var(--am-text-primary);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Modal animations */
+/* ============================================
+   Utility Classes for the Design System
+   ============================================ */
+
+/* Primary Buttons */
+.am-btn-primary {
+  background-color: var(--am-primary);
+  color: #fff;
+  font-weight: 600;
+  border-radius: var(--am-radius-sm);
+  padding: 0.625rem 1.5rem;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--am-shadow-sm);
+}
+
+.am-btn-primary:hover {
+  background-color: var(--am-primary-dark);
+  box-shadow: var(--am-shadow);
+  transform: translateY(-1px);
+}
+
+.am-btn-primary:active {
+  transform: translateY(0);
+}
+
+.am-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Secondary Buttons */
+.am-btn-secondary {
+  background-color: #fff;
+  color: var(--am-primary);
+  font-weight: 600;
+  border-radius: var(--am-radius-sm);
+  padding: 0.625rem 1.5rem;
+  transition: all 0.2s ease;
+  border: 1.5px solid var(--am-primary);
+  cursor: pointer;
+}
+
+.am-btn-secondary:hover {
+  background-color: var(--am-primary-50);
+  border-color: var(--am-primary-dark);
+  transform: translateY(-1px);
+}
+
+.am-btn-secondary:active {
+  transform: translateY(0);
+}
+
+/* Cards */
+.am-card {
+  background-color: var(--am-bg-card);
+  border-radius: var(--am-radius);
+  box-shadow: var(--am-shadow);
+  border: 1px solid var(--am-border);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.am-card:hover {
+  box-shadow: var(--am-shadow-md);
+}
+
+.am-card-interactive:hover {
+  box-shadow: var(--am-shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* Inputs */
+.am-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--am-border);
+  border-radius: var(--am-radius-sm);
+  background-color: #fff;
+  color: var(--am-text-primary);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.am-input:focus {
+  border-color: var(--am-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.am-input::placeholder {
+  color: var(--am-text-muted);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
 @keyframes slideInUp {
   from {
     opacity: 0;
@@ -66,7 +268,6 @@ body {
   animation: fade-in 0.3s ease-out;
 }
 
-/* Toast notification animations */
 @keyframes slide-in-right {
   from {
     opacity: 0;
@@ -82,26 +283,6 @@ body {
   animation: slide-in-right 0.3s ease-out;
 }
 
-/* Smooth scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 10px;
-  transition: background 0.3s ease;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
 @keyframes pulse-subtle {
   0%, 100% {
     opacity: 1;
@@ -115,4 +296,147 @@ body {
 
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ============================================
+   Scrollbar Styles
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--am-bg);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--am-border);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--am-text-muted);
+}
+
+/* ============================================
+   Selection Color
+   ============================================ */
+
+::selection {
+  background-color: var(--am-primary-200);
+  color: var(--am-text-primary);
+}
+
+/* ============================================
+   Global Color Overrides
+   Maps Tailwind default utilities to AgileMind palette.
+   This ensures ALL existing components across the app
+   automatically use our design system colors.
+   ============================================ */
+
+/* Override gray-50/100 backgrounds to our brand light grays */
+@layer utilities {
+  /* Text color overrides for consistency */
+  .text-gray-900 { color: var(--am-text-primary) !important; }
+  .text-gray-800 { color: var(--am-text-primary) !important; }
+  .text-gray-700 { color: #334155 !important; }
+  .text-gray-600 { color: var(--am-text-secondary) !important; }
+  .text-gray-500 { color: var(--am-text-secondary) !important; }
+  .text-gray-400 { color: var(--am-text-muted) !important; }
+
+  /* Background overrides */
+  .bg-gray-50 { background-color: var(--am-bg) !important; }
+  .bg-gray-100 { background-color: #F1F5F9 !important; }
+
+  /* Blue (primary) color overrides */
+  .bg-blue-600 { background-color: var(--am-primary) !important; }
+  .bg-blue-700 { background-color: var(--am-primary-dark) !important; }
+  .bg-blue-500 { background-color: var(--am-primary) !important; }
+  .bg-blue-100 { background-color: var(--am-primary-50) !important; }
+  .bg-blue-50 { background-color: var(--am-primary-50) !important; }
+  .text-blue-600 { color: var(--am-primary) !important; }
+  .text-blue-700 { color: var(--am-primary-dark) !important; }
+  .text-blue-100 { color: var(--am-primary-100) !important; }
+  .text-blue-200 { color: var(--am-primary-200) !important; }
+  .border-blue-600 { border-color: var(--am-primary) !important; }
+  .border-blue-500 { border-color: var(--am-primary) !important; }
+  .border-blue-200 { border-color: var(--am-primary-200) !important; }
+
+  /* Indigo (secondary) overrides */
+  .bg-indigo-100 { background-color: var(--am-secondary-50) !important; }
+  .bg-indigo-600 { background-color: var(--am-secondary) !important; }
+  .text-indigo-600 { color: var(--am-secondary) !important; }
+  .border-indigo-200 { border-color: var(--am-secondary-100) !important; }
+
+  /* Green (success) overrides */
+  .bg-green-500 { background-color: var(--am-success) !important; }
+  .bg-green-100 { background-color: var(--am-success-light) !important; }
+  .text-green-600 { color: var(--am-success) !important; }
+  .border-green-200 { border-color: var(--am-success-border) !important; }
+
+  /* Red (error) overrides */
+  .bg-red-100 { background-color: var(--am-error-light) !important; }
+  .bg-red-50 { background-color: var(--am-error-light) !important; }
+  .text-red-600 { color: var(--am-error) !important; }
+  .text-red-500 { color: var(--am-error) !important; }
+  .text-red-800 { color: #991B1B !important; }
+  .border-red-200 { border-color: var(--am-error-border) !important; }
+
+  /* Yellow/Amber (warning) overrides */
+  .bg-yellow-500 { background-color: var(--am-warning) !important; }
+  .bg-yellow-100 { background-color: var(--am-warning-light) !important; }
+  .text-yellow-600 { color: var(--am-warning) !important; }
+  .border-yellow-200 { border-color: var(--am-warning-border) !important; }
+
+  /* Teal (accent) overrides */
+  .bg-teal-100 { background-color: var(--am-accent-50) !important; }
+  .text-teal-600 { color: var(--am-accent) !important; }
+
+  /* Border overrides */
+  .border-gray-200 { border-color: var(--am-border) !important; }
+  .border-gray-300 { border-color: var(--am-border) !important; }
+  .border-gray-100 { border-color: var(--am-border-light) !important; }
+  .divide-gray-200 > * + * { border-color: var(--am-border) !important; }
+
+  /* Focus ring overrides */
+  .focus\:ring-blue-500:focus { --tw-ring-color: var(--am-primary) !important; }
+  .focus\:border-blue-500:focus { border-color: var(--am-primary) !important; }
+  .focus\:border-transparent:focus { border-color: transparent !important; }
+
+  /* Hover background overrides */
+  .hover\:bg-blue-50:hover { background-color: var(--am-hover-bg) !important; }
+  .hover\:bg-blue-700:hover { background-color: var(--am-primary-dark) !important; }
+  .hover\:bg-gray-50:hover { background-color: var(--am-hover-bg) !important; }
+  .hover\:text-blue-600:hover { color: var(--am-primary) !important; }
+  .hover\:text-red-600:hover { color: var(--am-error) !important; }
+  .hover\:border-blue-600:hover { border-color: var(--am-primary) !important; }
+
+  /* Shadow overrides for cards */
+  .shadow { box-shadow: var(--am-shadow) !important; }
+  .shadow-sm { box-shadow: var(--am-shadow-sm) !important; }
+  .shadow-md { box-shadow: var(--am-shadow-md) !important; }
+  .shadow-lg { box-shadow: var(--am-shadow-lg) !important; }
+  .shadow-xl { box-shadow: var(--am-shadow-xl) !important; }
+
+  /* Rounded corner overrides for cards */
+  .rounded-xl { border-radius: 12px !important; }
+  .rounded-2xl { border-radius: 16px !important; }
+  .rounded-lg { border-radius: 10px !important; }
 }

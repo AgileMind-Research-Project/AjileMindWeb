@@ -73,6 +73,20 @@ export const backlogApi = {
         });
     },
 
+    // Upload Excel/CSV file to create bugs
+    uploadBugs: async (projectId: number, sprintId: number, file: File): Promise<UploadBacklogResponse> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', projectId.toString());
+        formData.append('sprint_id', sprintId.toString());
+
+        return httpClient.post('/backlog/upload-bugs', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+
     // Create a single backlog item
     createBacklogItem: async (data: CreateBacklogItemRequest): Promise<CreateBacklogItemResponse> => {
         return httpClient.post('/backlog/', data);

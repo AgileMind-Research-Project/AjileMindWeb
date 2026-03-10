@@ -41,24 +41,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-6">
+    <div className="min-h-screen flex items-center justify-center p-6" style={{
+      background: 'linear-gradient(135deg, var(--am-primary-50) 0%, #FFFFFF 50%, var(--am-secondary-50) 100%)'
+    }}>
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-600 mb-2">AgileMind Platform</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ backgroundColor: 'var(--am-primary)' }}>
+            <span className="text-white font-bold text-2xl">A</span>
+          </div>
+          <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--am-primary)' }}>AgileMind Platform</h1>
+          <p style={{ color: 'var(--am-text-secondary)' }}>Sign in to your account</p>
         </div>
 
         {/* Login Form */}
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="rounded-2xl p-8" style={{
+          backgroundColor: 'white',
+          boxShadow: 'var(--am-shadow-lg)',
+          border: '1px solid var(--am-border)'
+        }}>
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-semibold mb-2" style={{ color: 'var(--am-text-primary)' }}>
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: 'var(--am-text-muted)' }} />
                 <input
                   type="email"
                   id="email"
@@ -67,7 +76,19 @@ export default function LoginPage() {
                   onChange={handleChange}
                   required
                   autoComplete="email"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl text-sm transition-all duration-200 outline-none"
+                  style={{
+                    border: '1.5px solid var(--am-border)',
+                    color: 'var(--am-text-primary)',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--am-primary)';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--am-border)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                   placeholder="your.email@company.com"
                 />
               </div>
@@ -75,11 +96,11 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-semibold mb-2" style={{ color: 'var(--am-text-primary)' }}>
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: 'var(--am-text-muted)' }} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   id="password"
@@ -88,13 +109,26 @@ export default function LoginPage() {
                   onChange={handleChange}
                   required
                   autoComplete="current-password"
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-3 rounded-xl text-sm transition-all duration-200 outline-none"
+                  style={{
+                    border: '1.5px solid var(--am-border)',
+                    color: 'var(--am-text-primary)',
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--am-primary)';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--am-border)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors"
+                  style={{ color: 'var(--am-text-muted)' }}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -106,7 +140,10 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => router.push('/auth/forgot-password')}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="text-sm font-semibold transition-colors"
+                style={{ color: 'var(--am-primary)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--am-primary-dark)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--am-primary)'; }}
               >
                 Forgot password?
               </button>
@@ -116,7 +153,23 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: loading ? 'var(--am-text-muted)' : 'var(--am-primary)',
+                boxShadow: loading ? 'none' : '0 4px 14px 0 rgba(37, 99, 235, 0.3)'
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.backgroundColor = 'var(--am-primary-dark)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.backgroundColor = 'var(--am-primary)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
             >
               {loading ? 'Signing In...' : 'Sign In'}
             </button>
@@ -124,11 +177,14 @@ export default function LoginPage() {
 
           {/* Register Link */}
           <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Don't have an account?{' '}
+            <p style={{ color: 'var(--am-text-secondary)' }}>
+              Don&apos;t have an account?{' '}
               <button
                 onClick={() => router.push('/register')}
-                className="text-blue-600 hover:text-blue-700 font-medium"
+                className="font-semibold transition-colors"
+                style={{ color: 'var(--am-primary)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--am-primary-dark)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--am-primary)'; }}
               >
                 Create Account
               </button>
@@ -140,7 +196,10 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <button
             onClick={() => router.push('/')}
-            className="text-gray-600 hover:text-gray-800"
+            className="transition-colors text-sm"
+            style={{ color: 'var(--am-text-secondary)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--am-text-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--am-text-secondary)'; }}
           >
             ← Back to Home
           </button>

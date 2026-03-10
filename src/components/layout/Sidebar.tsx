@@ -20,13 +20,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
   const [isDashboardOpen, setIsDashboardOpen] = useState(true);
-  console.log('User Debug:', {
-    user,
-    roles: user?.roles,
-    role: user?.role,
-    rolesType: typeof user?.roles,
-    roleType: typeof user?.role
-  });
 
   const menuItems: MenuItem[] = [
 
@@ -291,22 +284,34 @@ export default function Sidebar() {
 
 
   return (
-    <aside className="w-64 bg-gray-50 fixed left-0 top-16 bottom-0 flex flex-col shadow-lg border-r border-gray-200">
+    <aside className="w-64 fixed left-0 top-16 bottom-0 flex flex-col overflow-hidden" style={{
+      backgroundColor: 'var(--am-bg-sidebar)',
+      borderRight: '1px solid var(--am-border)',
+    }}>
       {/* Navigation Menu */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {/* Dashboard Collapsible Section - Always at top */}
         {visibleDashboardSubMenuItems.length > 0 && (
-          <div>
+          <div className="mb-1">
             {/* Dashboard Header - Collapsible Trigger */}
             <button
               onClick={() => setIsDashboardOpen(!isDashboardOpen)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-md text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200"
+              style={{ color: 'var(--am-text-primary)' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--am-hover-bg)';
+                e.currentTarget.style.color = 'var(--am-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = 'var(--am-text-primary)';
+              }}
             >
               <div className="flex items-center space-x-3">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
-                <span className="font-semibold">Dashboard</span>
+                <span className="font-semibold text-sm">Dashboard</span>
               </div>
               <svg
                 className={`w-4 h-4 transition-transform duration-200 ${isDashboardOpen ? 'rotate-180' : ''
@@ -321,7 +326,7 @@ export default function Sidebar() {
 
             {/* Dashboard Submenu Items */}
             {isDashboardOpen && (
-              <div className="mt-1 ml-4 space-y-1 animate-fade-in">
+              <div className="mt-1 ml-3 space-y-0.5 animate-fade-in">
                 {visibleDashboardSubMenuItems.map((subItem) => {
                   const isActive = pathname === subItem.path;
 
@@ -329,26 +334,34 @@ export default function Sidebar() {
                     <Link
                       key={subItem.label + subItem.path}
                       href={subItem.path}
-                      className={`
-                        flex items-center space-x-3 px-4 py-2.5 rounded-md transition-all duration-200 text-sm
-                        ${isActive
-                          ? `
-                              bg-indigo-100
-                              text-blue-600
-                              shadow-sm
-                              font-semibold
-                              border-l-4
-                              border-blue-600
-                            `
-                          : `
-                              text-gray-600
-                              hover:bg-blue-50
-                              hover:text-blue-600
-                              hover:border-l-4
-                              hover:border-blue-600
-                            `
+                      className="flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm"
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: 'var(--am-primary-50)',
+                              color: 'var(--am-primary)',
+                              fontWeight: 600,
+                              borderLeft: '3px solid var(--am-primary)',
+                            }
+                          : {
+                              color: 'var(--am-text-secondary)',
+                              borderLeft: '3px solid transparent',
+                            }
+                      }
+                      onMouseEnter={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.backgroundColor = 'var(--am-hover-bg)';
+                          e.currentTarget.style.color = 'var(--am-primary)';
+                          e.currentTarget.style.borderLeft = '3px solid var(--am-primary-200)';
                         }
-                      `}
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = 'var(--am-text-secondary)';
+                          e.currentTarget.style.borderLeft = '3px solid transparent';
+                        }
+                      }}
                     >
                       {subItem.icon}
                       <span>{subItem.label}</span>
@@ -360,6 +373,9 @@ export default function Sidebar() {
           </div>
         )}
 
+        {/* Divider */}
+        <div className="my-2 mx-2" style={{ borderTop: '1px solid var(--am-border)' }}></div>
+
         {/* Other Menu Items */}
         {visibleMenuItems.map((item) => {
           const isActive = pathname === item.path;
@@ -368,25 +384,34 @@ export default function Sidebar() {
             <Link
               key={item.label + item.path}
               href={item.path}
-              className={`
-              flex items-center space-x-3 px-4 py-3 rounded-md transition-all duration-200
-              ${isActive
-                  ? `
-                      bg-indigo-100 
-                      text-blue-600 
-                      border-l-4 
-                      border-blue-600 
-                      font-semibold
-                    `
-                  : `
-                    text-gray-700 
-                    hover:bg-blue-50 
-                    hover:text-blue-600 
-                    hover:border-l-4 
-                    hover:border-blue-600
-                  `
+              className="flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm"
+              style={
+                isActive
+                  ? {
+                      backgroundColor: 'var(--am-primary-50)',
+                      color: 'var(--am-primary)',
+                      fontWeight: 600,
+                      borderLeft: '3px solid var(--am-primary)',
+                    }
+                  : {
+                      color: 'var(--am-text-primary)',
+                      borderLeft: '3px solid transparent',
+                    }
+              }
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'var(--am-hover-bg)';
+                  e.currentTarget.style.color = 'var(--am-primary)';
+                  e.currentTarget.style.borderLeft = '3px solid var(--am-primary-200)';
                 }
-            `}
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--am-text-primary)';
+                  e.currentTarget.style.borderLeft = '3px solid transparent';
+                }
+              }}
             >
               {item.icon}
               <span>{item.label}</span>

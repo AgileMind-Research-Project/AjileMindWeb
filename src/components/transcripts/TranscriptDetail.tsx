@@ -34,6 +34,8 @@ interface AnalyzedTask {
   effort: number | null;
   assignee: string | null;
   tags: string[] | null;
+  meeting_status?: string | null;
+  database_status?: string | null;
 }
 
 interface LeaveEntry {
@@ -42,6 +44,13 @@ interface LeaveEntry {
   leave_hours: number | null;
   leave_type: string;
   reason: string | null;
+}
+
+interface BugEntry {
+  title: string;
+  reporter: string;
+  severity: string;
+  description: string;
 }
 
 interface Project {
@@ -85,6 +94,7 @@ interface TranscriptDetailProps {
 const CATEGORY_STYLES: Record<string, string> = {
   daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  sprint_review: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
   retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   other: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200",
@@ -92,6 +102,7 @@ const CATEGORY_STYLES: Record<string, string> = {
 const CATEGORY_LABELS: Record<string, string> = {
   daily_standup: "Daily Standup",
   sprint_planning: "Sprint Planning",
+  sprint_review: "Sprint Review",
   sprint_meeting: "Sprint Meeting",
   retrospective: "Retrospective",
   other: "Other",
@@ -129,6 +140,7 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
   const [analyzed, setAnalyzed] = useState(false);
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
   const [leaveInfo, setLeaveInfo] = useState<LeaveEntry[]>([]);
+  const [bugs, setBugs] = useState<BugEntry[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
 
@@ -147,14 +159,6 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcriptId, hasHydrated, accessToken, isAuthenticated]);
-
-  // ── auto-analyse once transcript is loaded ───────────────────────────────
-  useEffect(() => {
-    if (transcript?.id && accessToken) {
-      runAnalysis();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcript?.id]);
 
   // ── data fetchers ────────────────────────────────────────────────────────
   const fetchTranscript = async () => {
@@ -201,8 +205,11 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
       const data = await res.json();
       const fetchedTasks: AnalyzedTask[] = data.tasks || [];
       const fetchedLeaves: LeaveEntry[] = data.leave_info || [];
+      const fetchedBugs: BugEntry[] = data.bugs || [];
+
       setTasks(fetchedTasks);
       setLeaveInfo(fetchedLeaves);
+      setBugs(fetchedBugs);
       setAnalyzed(true);
 
       // init per-task UI state
@@ -262,25 +269,6 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
   const updateTaskState = (idx: number, patch: Partial<TaskState>) =>
     setTaskStates((prev) => ({ ...prev, [idx]: { ...prev[idx], ...patch } }));
 
-  const applyTaskEdit = (idx: number) => {
-    const s = taskStates[idx];
-    setTasks((prev) =>
-      prev.map((t, i) =>
-        i === idx
-          ? { ...t, task_id: s.editTaskId || t.task_id, assignee: s.editAssignee || t.assignee }
-          : t
-      )
-    );
-    updateTaskState(idx, { expanded: false });
-  };
-
-  const discardTaskEdit = (idx: number) =>
-    updateTaskState(idx, {
-      expanded: false,
-      editTaskId: tasks[idx]?.task_id ?? "",
-      editAssignee: tasks[idx]?.assignee ?? "",
-    });
-
   const fetchReports = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/reports/?transcript_id=${transcriptId}`, {
@@ -304,42 +292,6 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete transcript");
     }
-  };
-
-  const getCategoryBadge = (category: string) => {
-    const styles = {
-      daily_standup: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-      sprint_planning: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      sprint_meeting: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-      retrospective: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-      brainstorming: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-    };
-
-    const labels = {
-      daily_standup: "Daily Standup",
-      sprint_planning: "Sprint Planning",
-      sprint_meeting: "Sprint Meeting",
-      retrospective: "Retrospective",
-      brainstorming: "Brainstorming"
-    };
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[category as keyof typeof styles]}`}>
-        {labels[category as keyof typeof labels]}
-      </span>
-    );
-  };
-
-  const getStatusBadge = (status: string) => {
-    return status === "published" ? (
-      <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full text-xs">
-        Published
-      </span>
-    ) : (
-      <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-full text-xs">
-        Draft
-      </span>
-    );
   };
 
   if (loading) {
@@ -421,14 +373,14 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
             <div className="flex gap-2">
               <button
                 onClick={() => setShowGenerateModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
               >
                 <FileBarChart className="w-4 h-4" />
-                Generate Report
+                Report
               </button>
               <button
                 onClick={handleDelete}
-                className="shrink-0 flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete
@@ -437,28 +389,174 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
           </div>
         </div>
 
-        {/* ── Transcript content (collapsed by default) ─────────────────────── */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        {/* ── AI Analysis Block ────────────────────────────────────────────── */}
+        {analyzed && (tasks.length > 0 || leaveInfo.length > 0 || bugs.length > 0) && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-purple-100 dark:border-purple-900/30 overflow-hidden">
+            <div className="bg-purple-50/50 dark:bg-purple-900/10 p-6 border-b border-purple-100 dark:border-purple-900/30 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+                AI Task & {['sprint_review', 'sprint_meeting'].includes((transcript.category || '').toLowerCase()) ? 'Bug' : 'Leave'} Status
+              </h2>
+              <span className="bg-white dark:bg-gray-700 px-3 py-1 rounded-full text-xs font-bold text-purple-600 dark:text-purple-400 border border-purple-200">
+                {tasks.length} Tasks Detected
+              </span>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                {/* Tasks List */}
+                <div className="lg:col-span-3 space-y-4">
+                  <h3 className="font-bold text-gray-700 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    Detected Updates
+                  </h3>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700 border dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+                    {tasks.map((task, idx) => {
+                      const isExpanded = taskStates[idx]?.expanded;
+                      return (
+                        <div key={idx} className="bg-white dark:bg-gray-800">
+                          <button
+                            onClick={() => toggleExpand(idx)}
+                            className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors ${isExpanded ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}
+                          >
+                            <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            <span className="text-[11px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded">{task.task_id || 'NEW'}</span>
+                            <span className="flex-1 text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{task.summary}</span>
+
+                            {task.meeting_status && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase
+                                ${task.meeting_status.toLowerCase().includes('complete') && !task.meeting_status.toLowerCase().includes('incomplete')
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                {task.meeting_status}
+                              </span>
+                            )}
+                          </button>
+
+                          {isExpanded && (
+                            <div className="px-11 py-5 bg-gray-50/50 dark:bg-gray-900/20 border-t border-gray-100 dark:border-gray-700 space-y-4">
+                              <div>
+                                <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-1">Observation</h4>
+                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic border-l-3 border-purple-200 pl-3">
+                                  {task.description || "Mentioned in discussion."}
+                                </p>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 shadow-sm">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase">Meeting Status</p>
+                                  <p className="text-sm font-bold text-blue-600">{task.meeting_status || "Mentioned"}</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 shadow-sm">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase">DB Sync Status</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{task.database_status || "New"}</p>
+                                    {task.meeting_status && task.database_status && task.meeting_status.toLowerCase() !== task.database_status.toLowerCase() && (
+                                      <span className="text-[9px] bg-rose-100 text-rose-600 px-1 rounded font-bold">Inconsistent</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 text-xs font-medium text-gray-500 pt-2 border-t border-gray-100">
+                                <span className="flex items-center gap-1"><User className="w-3.5 h-3.5 text-gray-400" /> {task.assignee || 'Unassigned'}</span>
+                                {task.effort ? <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-400" /> {task.effort}h</span> : null}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Leaves / Bugs Column */}
+                <div className="lg:col-span-2 space-y-4">
+                  {['sprint_review', 'sprint_meeting'].includes((transcript.category || '').toLowerCase()) ? (
+                    <>
+                      <h3 className="font-bold text-gray-700 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <span className="w-2 h-2 bg-rose-500 rounded-full"></span>
+                        Bug Reports
+                      </h3>
+                      <div className="space-y-2">
+                        {bugs.length === 0 ? (
+                          <div className="text-center py-10 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200">
+                            <p className="text-sm text-gray-400 italic">No bugs detected.</p>
+                          </div>
+                        ) : (
+                          bugs.map((b, idx) => (
+                            <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 shadow-sm space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${b.severity === 'High' ? 'bg-rose-100 text-rose-700' :
+                                  b.severity === 'Medium' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-blue-100 text-blue-700'
+                                  }`}>
+                                  {b.severity} Severity
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
+                                  <User className="w-3 h-3" /> {b.reporter}
+                                </span>
+                              </div>
+                              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">{b.title}</p>
+                              <p className="text-xs text-gray-500 leading-tight">{b.description}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="font-bold text-gray-700 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                        Leave Entries
+                      </h3>
+                      <div className="space-y-2">
+                        {leaveInfo.length === 0 ? (
+                          <div className="text-center py-10 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200">
+                            <p className="text-sm text-gray-400 italic">No leave detected.</p>
+                          </div>
+                        ) : (
+                          leaveInfo.map((l, idx) => (
+                            <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs">
+                                  {l.developer_name[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold truncate max-w-[120px]">{l.developer_name}</p>
+                                  <p className="text-[10px] text-gray-500 font-medium">{l.leave_date} • {l.leave_hours}h</p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded font-bold uppercase">{l.reason || "Out"}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Raw Transcript ────────────────────────────────────────────────── */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
           <button
-            onClick={() => setContentExpanded((v) => !v)}
+            onClick={() => setContentExpanded(v => !v)}
             className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-200 dark:border-gray-700"
           >
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Transcript Content
-              <span className="text-xs font-normal text-gray-400 dark:text-gray-500 ml-1">
-                ({transcript.transcript_content.length.toLocaleString()} characters)
-              </span>
+              Transcript
             </h2>
-            {contentExpanded
-              ? <ChevronUp className="w-5 h-5 text-gray-400" />
-              : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            {contentExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
           </button>
 
           {contentExpanded && (
-            <div className="p-6">
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 max-h-96 overflow-y-auto">
-                <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+            <div className="p-6 bg-gray-50 dark:bg-gray-900/20">
+              <div className="bg-white dark:bg-gray-900 rounded-lg p-6 border border-gray-100 dark:border-gray-800 max-h-96 overflow-y-auto">
+                <pre className="whitespace-pre-wrap font-mono text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
                   {transcript.transcript_content}
                 </pre>
               </div>
@@ -467,7 +565,8 @@ export default function TranscriptDetail({ transcriptId }: Readonly<TranscriptDe
         </div>
 
       </div>
-      {/* Generate Report Modal */}
+
+      {/* Modals */}
       {showGenerateModal && (
         <ReportGenerator
           transcriptId={transcriptId}
