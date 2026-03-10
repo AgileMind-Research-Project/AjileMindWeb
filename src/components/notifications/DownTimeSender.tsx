@@ -30,7 +30,7 @@ export default function DownTimeSender() {
         schedule: {
             start_time: '',
             end_time: '',
-            timezone: 'UTC'
+            timezone: 'Asia/Colombo'
         },
         audience: Audience.ALL_USERS,
         project_id: null,
@@ -339,7 +339,7 @@ export default function DownTimeSender() {
                     ? formatDateTimeLocal(new Date(new Date(item.end_date).getTime() - 30 * 60000))
                     : (item.start_date ? formatDateTimeLocal(new Date(item.start_date)) : ''),
                 end_time: item.end_date ? formatDateTimeLocal(new Date(item.end_date)) : '',
-                timezone: 'UTC',
+                timezone: 'Asia/Colombo',
             },
             scheduled_at: item.end_date
                 ? formatDateTimeLocal(new Date(new Date(item.end_date).getTime() - 60 * 60000))
