@@ -505,14 +505,13 @@ const ReleaseNotes: React.FC = () => {
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500 text-center">Sprint</th>
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500">Summary</th>
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500">Target Date</th>
-                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Status</th>
                                     <th className="px-3 py-2 text-right text-xs font-bold text-gray-500">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {backlogReleases.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
+                                        <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
                                     </tr>
                                 ) : (
                                     backlogReleases.map(item => (
@@ -540,12 +539,6 @@ const ReleaseNotes: React.FC = () => {
                                                 <div className="text-xs text-gray-600">
                                                     {item.end_date ? new Date(item.end_date).toLocaleDateString() : 'TBD'}
                                                 </div>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                <span className={`text-xs px-1.5 py-0.5 rounded ${item.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                    {item.status}
-                                                </span>
                                             </td>
                                             <td className="px-3 py-2 text-right">
                                                 <div className="flex items-center justify-end gap-2">
