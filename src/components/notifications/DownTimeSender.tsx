@@ -41,7 +41,9 @@ export default function DownTimeSender() {
             message_body: 'We will be performing scheduled maintenance to improve system performance and security.'
         },
         scheduled_at: '',
-        target_roles: []
+        target_roles: [],
+        include_release_note: true,
+        release_note_content: { subject: '', message_body: '' }
     });
 
     // Helper to get unique roles from project members
@@ -281,6 +283,31 @@ export default function DownTimeSender() {
         try {
             const recipientsToSend = selectedEmails.length > 0 ? projectMembers.filter(m => selectedEmails.includes(m.email)) : projectMembers;
 
+            // Prepare Release Note if needed
+            let releaseNotePayload = undefined;
+            if (autoReleaseNote && formData.schedule.end_time) {
+                const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
+
+                // Prepare structured content for the backend to render the premium "Official" look
+                const structuredBody = JSON.stringify({
+                    summary: selectedBacklogItem ? selectedBacklogItem.description || selectedBacklogItem.summary : formData.content.message_body,
+                    features: selectedBacklogItem ? [selectedBacklogItem.summary] : [formData.content.subject],
+                    improvements: ["Maintenance verification and stability checks completed."],
+                    bug_fixes: [],
+                });
+
+                releaseNotePayload = {
+                    subject: `Official Release: ${projectName} Protocol v1.x`,
+                    message_body: structuredBody
+                };
+            }
+
+            const finalPayload = {
+                ...payload,
+                include_release_note: autoReleaseNote,
+                release_note_content: releaseNotePayload
+            } as any;
+
             if (immediate) {
                 if (recipientsToSend.length > 0 && (formData.audience === Audience.PROJECT_MEMBERS || formData.project_id)) {
                     for (const member of recipientsToSend) {
@@ -294,8 +321,8 @@ export default function DownTimeSender() {
             }
 
             const response = isEditing && editId
-                ? await notificationsApi.updateDowntimeNotification(editId, payload as any)
-                : await notificationsApi.sendDowntimeNotification(payload as any);
+                ? await notificationsApi.updateDowntimeNotification(editId, finalPayload)
+                : await notificationsApi.sendDowntimeNotification(finalPayload);
 
             if (response.success) {
                 // Refresh history immediately so the user sees the update
@@ -304,39 +331,6 @@ export default function DownTimeSender() {
                 if (isEditing) {
                     setIsEditing(false);
                     setEditId(null);
-                } else {
-                    // ONLY schedule a follow-up release note if this is a NEW maintenance notification
-                    // creating a new one on every update would lead to duplicates.
-                    if (autoReleaseNote && formData.schedule.end_time) {
-                        try {
-                            const endTimeDate = new Date(formData.schedule.end_time);
-                            // Set Release Note to be sent EXACTLY at End Time (no delay)
-                            const releaseNoteScheduledAt = endTimeDate;
-
-                            const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
-
-                            // Prepare structured content for the backend JSON parser to render the premium "Official" look
-                            const structuredBody = JSON.stringify({
-                                summary: selectedBacklogItem ? selectedBacklogItem.description || selectedBacklogItem.summary : formData.content.message_body,
-                                features: selectedBacklogItem ? [selectedBacklogItem.summary] : [formData.content.subject],
-                                improvements: ["Maintenance verification and stability checks completed."],
-                                bug_fixes: [],
-                            });
-
-                            const releasePayload = {
-                                ...payload,
-                                type: DowntimeType.FEATURE_UPGRADE,
-                                scheduled_at: formatDateTimeLocal(releaseNoteScheduledAt),
-                                content: {
-                                    subject: `Official Release: ${projectName} Protocol v1.x`,
-                                    message_body: structuredBody
-                                }
-                            };
-                            await notificationsApi.sendDowntimeNotification(releasePayload as any);
-                        } catch (err) {
-                            console.error('Failed to schedule follow-up release note:', err);
-                        }
-                    }
                 }
 
                 const successMsg = isEditing
@@ -999,18 +993,35 @@ export default function DownTimeSender() {
                                     historyItems.map((item: any) => (
                                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-2">
-                                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${item.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                                                    }`}>
-                                                    {item.status}
-                                                </span>
+                                                <div className="flex flex-col gap-1">
+                                                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-center ${item.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        Alert: {item.status}
+                                                    </span>
+                                                    {item.release_note_status && item.release_note_status !== 'NONE' && (
+                                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-center ${item.release_note_status === 'SENT' ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                            Release: {item.release_note_status}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-2 text-gray-700">{item.type.replace('_', ' ')}</td>
                                             <td className="px-4 py-2 text-gray-900 font-medium truncate max-w-xs">{item.subject}</td>
                                             <td className="px-4 py-2 text-gray-600">{item.audience.replace('_', ' ')}</td>
-                                            <td className="px-4 py-2 text-gray-600">
-                                                {item.status === 'SCHEDULED'
-                                                    ? `📅 ${new Date(item.scheduled_at).toLocaleString()}`
-                                                    : `✅ ${item.sent_at ? new Date(item.sent_at).toLocaleString() : 'N/A'}`}
+                                            <td className="px-4 py-2 text-gray-600 text-[10px] space-y-1">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="opacity-50">Alert:</span>
+                                                    {item.status === 'SCHEDULED'
+                                                        ? `📅 ${new Date(item.scheduled_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                                                        : `✅ ${item.sent_at ? new Date(item.sent_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}`}
+                                                </div>
+                                                {item.release_note_status && item.release_note_status !== 'NONE' && (
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="opacity-50">Release:</span>
+                                                        {item.release_note_status === 'SCHEDULED'
+                                                            ? `⏳ End Time (${new Date(item.end_time).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`
+                                                            : `✅ ${item.release_sent_at ? new Date(item.release_sent_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}`}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-2">
                                                 <div className="flex items-center gap-2">
@@ -1078,14 +1089,23 @@ export default function DownTimeSender() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-semibold text-gray-500 uppercase">Status</label>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Alert Status</label>
                                     <p className="mt-1">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${selectedNotification.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                                            }`}>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${selectedNotification.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                                             {selectedNotification.status}
                                         </span>
                                     </p>
                                 </div>
+                                {selectedNotification.release_note_status && selectedNotification.release_note_status !== 'NONE' && (
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-500 uppercase">Release Note Status</label>
+                                        <p className="mt-1">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${selectedNotification.release_note_status === 'SENT' ? 'bg-teal-100 text-teal-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                {selectedNotification.release_note_status}
+                                            </span>
+                                        </p>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase">Type</label>
                                     <p className="mt-1 text-sm text-gray-900">{selectedNotification.type.replace('_', ' ')}</p>

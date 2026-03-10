@@ -42,6 +42,8 @@ export interface DowntimeNotificationRequest {
     target_emails?: string[]; // Specific recipients list
     content: Content;
     scheduled_at?: string; // ISO String for delayed sending
+    include_release_note?: boolean;
+    release_note_content?: Content;
 }
 
 export interface NotificationResponse {
