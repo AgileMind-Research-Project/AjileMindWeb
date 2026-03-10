@@ -21,6 +21,8 @@ export default function DownTimeSender() {
     const [loadingBacklog, setLoadingBacklog] = useState(false);
     const [autoReleaseNote, setAutoReleaseNote] = useState(true);
     const [selectedBacklogItem, setSelectedBacklogItem] = useState<BacklogRelease | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editId, setEditId] = useState<number | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<DowntimeNotificationRequest>({
@@ -207,6 +209,45 @@ export default function DownTimeSender() {
         }
     };
 
+    const handleDeleteNotification = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this notification record?')) return;
+
+        try {
+            const response = await notificationsApi.deleteDowntimeNotification(id);
+            if (response.success) {
+                toast.success('Notification deleted successfully');
+                loadHistory();
+            }
+        } catch (error) {
+            console.error('Failed to delete notification:', error);
+            toast.error('Failed to delete notification');
+        }
+    };
+
+    const handleEditNotification = (item: any) => {
+        setEditId(item.id);
+        setIsEditing(true);
+        setFormData({
+            type: item.type,
+            priority: item.priority,
+            affected_components: item.affected_components ? (typeof item.affected_components === 'string' ? JSON.parse(item.affected_components) : item.affected_components) : [],
+            schedule: {
+                start_time: item.start_time ? formatDateTimeLocal(new Date(item.start_time)) : '',
+                end_time: item.end_time ? formatDateTimeLocal(new Date(item.end_time)) : '',
+                timezone: item.timezone || 'Asia/Colombo'
+            },
+            audience: item.audience,
+            project_id: item.project_id,
+            content: {
+                subject: item.subject,
+                message_body: item.message
+            },
+            scheduled_at: item.scheduled_at ? formatDateTimeLocal(new Date(item.scheduled_at)) : '',
+            target_roles: item.target_roles || []
+        });
+        setActiveTab('send');
+    };
+
     const handleSend = async (isImmediate = false) => {
         if (!formData.schedule.start_time || !formData.schedule.end_time) {
             toast.error('Please select both start and end times');
@@ -252,8 +293,15 @@ export default function DownTimeSender() {
                 }
             }
 
-            const response = await notificationsApi.sendDowntimeNotification(payload as any);
+            const response = isEditing && editId
+                ? await notificationsApi.updateDowntimeNotification(editId, payload as any)
+                : await notificationsApi.sendDowntimeNotification(payload as any);
+
             if (response.success) {
+                if (isEditing) {
+                    setIsEditing(false);
+                    setEditId(null);
+                }
                 // If autoReleaseNote is enabled, schedule the follow-up release note
                 if (autoReleaseNote && formData.schedule.end_time) {
                     try {
@@ -348,6 +396,8 @@ export default function DownTimeSender() {
 
         setSelectedBacklogItem(item);
         setAutoReleaseNote(true);
+        setIsEditing(false);
+        setEditId(null);
         setActiveTab('send');
         toast.success(`📋 Form auto-filled from: ${item.summary}`);
     };
@@ -378,16 +428,15 @@ export default function DownTimeSender() {
                                 <th className="px-3 py-2 font-bold text-center">Sprint</th>
                                 <th className="px-3 py-2 font-bold">Summary</th>
                                 <th className="px-3 py-2 font-bold">Target Date</th>
-                                <th className="px-3 py-2 font-bold">Status</th>
                                 <th className="px-3 py-2 font-bold">Priority</th>
                                 <th className="px-3 py-2 font-bold text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loadingBacklog ? (
-                                <tr><td colSpan={8} className="py-6 text-center text-gray-400 text-sm">Loading planned releases...</td></tr>
+                                <tr><td colSpan={7} className="py-6 text-center text-gray-400 text-sm">Loading planned releases...</td></tr>
                             ) : backlogReleases.length === 0 ? (
-                                <tr><td colSpan={8} className="py-6 text-center text-gray-400 text-sm">No planned releases found in backlog.</td></tr>
+                                <tr><td colSpan={7} className="py-6 text-center text-gray-400 text-sm">No planned releases found in backlog.</td></tr>
                             ) : (
                                 backlogReleases.map(item => (
                                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -416,11 +465,6 @@ export default function DownTimeSender() {
                                             </div>
                                         </td>
                                         <td className="px-3 py-2">
-                                            <span className={`text-xs px-1.5 py-0.5 rounded ${item.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-2">
                                             <span className={`text-xs px-1.5 py-0.5 rounded ${item.priority === 'high' || item.priority === 'highest' ? 'bg-red-100 text-red-700' :
                                                 item.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
                                                     'bg-gray-100 text-gray-600'
@@ -447,13 +491,35 @@ export default function DownTimeSender() {
             {/* Tabs */}
             <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
                 <button
-                    onClick={() => setActiveTab('send')}
+                    onClick={() => {
+                        setActiveTab('send');
+                        setIsEditing(false);
+                        setEditId(null);
+                        setFormData({
+                            type: DowntimeType.PLANNED_MAINTENANCE,
+                            priority: Priority.HIGH,
+                            affected_components: [],
+                            schedule: {
+                                start_time: '',
+                                end_time: '',
+                                timezone: 'Asia/Colombo'
+                            },
+                            audience: Audience.ALL_USERS,
+                            project_id: null,
+                            content: {
+                                subject: 'Scheduled Maintenance: System Upgrade',
+                                message_body: 'We will be performing scheduled maintenance to improve system performance and security.'
+                            },
+                            scheduled_at: '',
+                            target_roles: []
+                        });
+                    }}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'send'
                         ? 'bg-white text-gray-900 shadow-sm'
                         : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
-                    📢 Send Notification
+                    📢 {isEditing ? 'Edit Notification' : 'Send Notification'}
                 </button>
                 <button
                     onClick={() => setActiveTab('history')}
@@ -471,7 +537,8 @@ export default function DownTimeSender() {
                     {/* LEFT SIDE: FORM */}
                     <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-3 overflow-y-auto">
                         <h2 className="text-sm font-bold text-gray-900 mb-1.5 flex items-center gap-2">
-                            <span className="text-base">📢</span> DownTime Sender
+                            <span className="text-base">📢</span> {isEditing ? 'Edit Notification' : 'DownTime Sender'}
+                            {isEditing && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded ml-2">Editing ID: #{editId}</span>}
                         </h2>
 
                         <div className="space-y-3">
@@ -772,7 +839,7 @@ export default function DownTimeSender() {
                                             ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                                             : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`}
                                 >
-                                    <span>📅</span> Schedule Broadcast
+                                    <span>📅</span> {isEditing ? 'Update Schedule' : 'Schedule Broadcast'}
                                 </button>
                                 <button
                                     type="button"
@@ -789,7 +856,7 @@ export default function DownTimeSender() {
                                             {statusMessage || 'Transmitting...'}
                                         </>
                                     ) : (
-                                        <><span>🚀</span> Send Now</>
+                                        <><span>🚀</span> {isEditing ? 'Update & Send' : 'Send Now'}</>
                                     )}
                                 </button>
                             </div>
@@ -945,9 +1012,26 @@ export default function DownTimeSender() {
                                                             setSelectedNotification(item);
                                                             setShowDetailsModal(true);
                                                         }}
-                                                        className="text-blue-600 hover:text-blue-800 text-[10px] underline"
+                                                        className="text-gray-400 hover:text-blue-600 transition-colors"
+                                                        title="View Details"
                                                     >
-                                                        View
+                                                        👁️
+                                                    </button>
+                                                    {item.status === 'SCHEDULED' && (
+                                                        <button
+                                                            onClick={() => handleEditNotification(item)}
+                                                            className="text-gray-400 hover:text-amber-600 transition-colors"
+                                                            title="Edit Notification"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleDeleteNotification(item.id)}
+                                                        className="text-gray-400 hover:text-red-600 transition-colors"
+                                                        title="Delete Record"
+                                                    >
+                                                        🗑️
                                                     </button>
                                                 </div>
                                             </td>

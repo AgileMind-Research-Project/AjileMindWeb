@@ -59,5 +59,15 @@ export const notificationsApi = {
     // List downtime notifications
     listDowntimeNotifications: async (page = 1, limit = 20): Promise<any> => {
         return httpClient.get('/notifications/downtime', { params: { page, page_size: limit } });
+    },
+
+    // Update downtime notification
+    updateDowntimeNotification: async (id: number, data: DowntimeNotificationRequest): Promise<NotificationResponse> => {
+        return httpClient.put(`/notifications/downtime/${id}`, data);
+    },
+
+    // Delete downtime notification
+    deleteDowntimeNotification: async (id: number): Promise<NotificationResponse> => {
+        return httpClient.delete(`/notifications/downtime/${id}`);
     }
 };
