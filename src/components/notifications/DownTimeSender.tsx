@@ -1025,15 +1025,6 @@ export default function DownTimeSender() {
                                             </td>
                                             <td className="px-4 py-2">
                                                 <div className="flex items-center gap-2">
-                                                    {item.status === 'SCHEDULED' && (
-                                                        <button
-                                                            onClick={() => handleSendScheduled(item.id)}
-                                                            className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700 transition-colors"
-                                                            disabled={sending}
-                                                        >
-                                                            Send Now
-                                                        </button>
-                                                    )}
                                                     <button
                                                         onClick={() => {
                                                             setSelectedNotification(item);
@@ -1181,18 +1172,6 @@ export default function DownTimeSender() {
                         </div>
 
                         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-                            {selectedNotification.status === 'SCHEDULED' && (
-                                <button
-                                    onClick={() => {
-                                        setShowDetailsModal(false);
-                                        handleSendScheduled(selectedNotification.id);
-                                    }}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                    disabled={sending}
-                                >
-                                    Send Now
-                                </button>
-                            )}
                             <button
                                 onClick={() => setShowDetailsModal(false)}
                                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
