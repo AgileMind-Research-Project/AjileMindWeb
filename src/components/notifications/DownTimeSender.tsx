@@ -689,7 +689,7 @@ export default function DownTimeSender() {
                                             <span className="text-red-500 font-black animate-pulse text-lg" title="Special Automation Point">*</span>
                                         </div>
                                         <div className="text-[9px] text-indigo-600/70 font-bold tracking-tight">
-                                            A follow-up notification with release details will be sent exactly at the Estimated End Time.
+                                            The Downtime Alert and Release Notes will be sent together at the Scheduled Send Time.
                                         </div>
                                     </div>
                                 </label>
