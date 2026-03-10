@@ -19,8 +19,10 @@ import {
     User,
     ArrowRight,
     LifeBuoy,
-    Edit3
+    Edit3,
+    Send
 } from 'lucide-react';
+import { notificationsApi, DowntimeType, Audience, Priority } from '@/lib/api/notifications.api';
 
 const ReleaseNotes: React.FC = () => {
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
@@ -313,6 +315,51 @@ const ReleaseNotes: React.FC = () => {
             loadReleaseNotes();
         } catch (error: any) {
             toast.error(error.response?.data?.detail || 'Failed to publish');
+        }
+    };
+
+    const handleShareOfficialNote = async (note: ReleaseNote) => {
+        const confirmShare = confirm(`Official Share: Broadcast Release v${note.version} [${note.title}] to ALL active users?`);
+        if (!confirmShare) return;
+
+        const toastId = toast.loading('Initiating global broadcast synthesis...');
+
+        try {
+            const projectName = projects.find(p => p.project_id === note.project_id)?.project_name || 'System';
+
+            // Construct the structured body that the backend parser expects
+            const structuredBody = JSON.stringify({
+                summary: note.summary,
+                features: note.content.features || [],
+                improvements: note.content.improvements || [],
+                bug_fixes: note.content.bug_fixes || [],
+                known_issues: note.content.known_issues || []
+            });
+
+            const payload = {
+                type: DowntimeType.FEATURE_UPGRADE,
+                priority: note.release_type === 'MAJOR' ? Priority.HIGH : Priority.MEDIUM,
+                affected_components: ["System Services", projectName],
+                schedule: {
+                    start_time: new Date().toISOString(),
+                    end_time: new Date().toISOString(),
+                    timezone: "Asia/Colombo"
+                },
+                audience: Audience.ALL_USERS,
+                project_id: note.project_id,
+                content: {
+                    subject: note.title,
+                    message_body: structuredBody
+                }
+            };
+
+            await notificationsApi.sendDowntimeNotification(payload as any);
+            toast.dismiss(toastId);
+            toast.success('Official Release distributed successfully! 📨');
+        } catch (error: any) {
+            console.error('Failed to share release note:', error);
+            toast.dismiss(toastId);
+            toast.error('Failed to distribute release documentation.');
         }
     };
 
@@ -653,10 +700,19 @@ const ReleaseNotes: React.FC = () => {
                                                 >
                                                     <Edit3 size={16} />
                                                 </button>
+                                                {note.status === 'PUBLISHED' && (
+                                                    <button
+                                                        onClick={() => handleShareOfficialNote(note)}
+                                                        className="p-1 text-gray-400 hover:text-emerald-600 transition-colors"
+                                                        title="Share Report (Email Broadcast)"
+                                                    >
+                                                        <Send size={15} />
+                                                    </button>
+                                                )}
                                                 {note.status === 'DRAFT' && (
                                                     <button
                                                         onClick={() => handlePublish(note.id)}
-                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs"
+                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs font-semibold"
                                                     >
                                                         Publish
                                                     </button>

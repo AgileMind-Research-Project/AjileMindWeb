@@ -315,13 +315,21 @@ export default function DownTimeSender() {
 
                             const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
 
+                            // Prepare structured content for the backend JSON parser to render the premium "Official" look
+                            const structuredBody = JSON.stringify({
+                                summary: selectedBacklogItem ? selectedBacklogItem.description || selectedBacklogItem.summary : formData.content.message_body,
+                                features: selectedBacklogItem ? [selectedBacklogItem.summary] : [formData.content.subject],
+                                improvements: ["Maintenance verification and stability checks completed."],
+                                bug_fixes: [],
+                            });
+
                             const releasePayload = {
                                 ...payload,
                                 type: DowntimeType.FEATURE_UPGRADE,
                                 scheduled_at: formatDateTimeLocal(releaseNoteScheduledAt),
                                 content: {
-                                    subject: `Release Details: ${projectName} - Maintenance Completed`,
-                                    message_body: `The scheduled maintenance for ${projectName} is now complete. \n\nRelated Release Details:\n${selectedBacklogItem ? `Summary: ${selectedBacklogItem.summary}\nDescription: ${selectedBacklogItem.description || 'N/A'}` : formData.content.subject}\n\nThank you for your patience.`
+                                    subject: `Official Release: ${projectName} Protocol v1.x`,
+                                    message_body: structuredBody
                                 }
                             };
                             await notificationsApi.sendDowntimeNotification(releasePayload as any);
