@@ -298,38 +298,45 @@ export default function DownTimeSender() {
                 : await notificationsApi.sendDowntimeNotification(payload as any);
 
             if (response.success) {
+                // Refresh history immediately so the user sees the update
+                loadHistory();
+
                 if (isEditing) {
                     setIsEditing(false);
                     setEditId(null);
-                }
-                // If autoReleaseNote is enabled, schedule the follow-up release note
-                if (autoReleaseNote && formData.schedule.end_time) {
-                    try {
-                        const endTimeDate = new Date(formData.schedule.end_time);
-                        const releaseNoteScheduledAt = new Date(endTimeDate.getTime() + 10 * 60000);
+                } else {
+                    // ONLY schedule a follow-up release note if this is a NEW maintenance notification
+                    // creating a new one on every update would lead to duplicates.
+                    if (autoReleaseNote && formData.schedule.end_time) {
+                        try {
+                            const endTimeDate = new Date(formData.schedule.end_time);
+                            const releaseNoteScheduledAt = new Date(endTimeDate.getTime() + 10 * 60000);
 
-                        const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
+                            const projectName = formData.project_id ? projects.find(p => p.project_id === formData.project_id)?.project_name : 'System';
 
-                        const releasePayload = {
-                            ...payload,
-                            type: DowntimeType.FEATURE_UPGRADE,
-                            scheduled_at: formatDateTimeLocal(releaseNoteScheduledAt),
-                            content: {
-                                subject: `Release Details: ${projectName} - Maintenance Completed`,
-                                message_body: `The scheduled maintenance for ${projectName} is now complete. \n\nRelated Release Details:\n${selectedBacklogItem ? `Summary: ${selectedBacklogItem.summary}\nDescription: ${selectedBacklogItem.description || 'N/A'}` : formData.content.subject}\n\nThank you for your patience.`
-                            }
-                        };
-                        await notificationsApi.sendDowntimeNotification(releasePayload as any);
-                    } catch (err) {
-                        console.error('Failed to schedule follow-up release note:', err);
+                            const releasePayload = {
+                                ...payload,
+                                type: DowntimeType.FEATURE_UPGRADE,
+                                scheduled_at: formatDateTimeLocal(releaseNoteScheduledAt),
+                                content: {
+                                    subject: `Release Details: ${projectName} - Maintenance Completed`,
+                                    message_body: `The scheduled maintenance for ${projectName} is now complete. \n\nRelated Release Details:\n${selectedBacklogItem ? `Summary: ${selectedBacklogItem.summary}\nDescription: ${selectedBacklogItem.description || 'N/A'}` : formData.content.subject}\n\nThank you for your patience.`
+                                }
+                            };
+                            await notificationsApi.sendDowntimeNotification(releasePayload as any);
+                        } catch (err) {
+                            console.error('Failed to schedule follow-up release note:', err);
+                        }
                     }
                 }
 
-                toast.success(immediate ? response.message : (autoReleaseNote ? "Downtime & Release Note scheduled! 🚀" : "Scheduled set successfully"));
-                if (activeTab === 'history') {
-                    loadHistory();
-                } else {
-                    toast('Notification sent/scheduled', {
+                const successMsg = isEditing
+                    ? "Notification updated successfully! 🔄"
+                    : (immediate ? response.message : (autoReleaseNote ? "Downtime & Release Note scheduled! 🚀" : "Scheduled set successfully"));
+
+                toast.success(successMsg);
+                if (activeTab !== 'history') {
+                    toast('Notification updated/sent', {
                         action: { label: 'View History', onClick: () => setActiveTab('history') }
                     });
                 }
