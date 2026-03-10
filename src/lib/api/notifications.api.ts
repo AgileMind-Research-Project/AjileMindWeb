@@ -39,8 +39,11 @@ export interface DowntimeNotificationRequest {
     audience: Audience | string;
     project_id?: number | null;
     target_roles?: string[]; // Filter by roles
+    target_emails?: string[]; // Specific recipients list
     content: Content;
     scheduled_at?: string; // ISO String for delayed sending
+    include_release_note?: boolean;
+    release_note_content?: Content;
 }
 
 export interface NotificationResponse {
@@ -58,5 +61,15 @@ export const notificationsApi = {
     // List downtime notifications
     listDowntimeNotifications: async (page = 1, limit = 20): Promise<any> => {
         return httpClient.get('/notifications/downtime', { params: { page, page_size: limit } });
+    },
+
+    // Update downtime notification
+    updateDowntimeNotification: async (id: number, data: DowntimeNotificationRequest): Promise<NotificationResponse> => {
+        return httpClient.put(`/notifications/downtime/${id}`, data);
+    },
+
+    // Delete downtime notification
+    deleteDowntimeNotification: async (id: number): Promise<NotificationResponse> => {
+        return httpClient.delete(`/notifications/downtime/${id}`);
     }
 };

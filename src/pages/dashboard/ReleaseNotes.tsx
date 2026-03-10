@@ -18,8 +18,11 @@ import {
     Clock,
     User,
     ArrowRight,
-    LifeBuoy
+    LifeBuoy,
+    Edit3,
+    Send
 } from 'lucide-react';
+import { notificationsApi, DowntimeType, Audience, Priority } from '@/lib/api/notifications.api';
 
 const ReleaseNotes: React.FC = () => {
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
@@ -61,6 +64,16 @@ const ReleaseNotes: React.FC = () => {
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
     const [lastVersion, setLastVersion] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+    const [newItemInputs, setNewItemInputs] = useState<Record<string, string>>({
+        features: '',
+        bug_fixes: '',
+        improvements: '',
+        breaking_changes: '',
+        known_issues: ''
+    });
+    const [editingItem, setEditingItem] = useState<{ category: string, index: number, value: string } | null>(null);
 
     useEffect(() => {
         if (formData.project_id) {
@@ -74,12 +87,16 @@ const ReleaseNotes: React.FC = () => {
         try {
             const { version } = await releaseNotesApi.getLatestVersion(projectId);
             setLastVersion(version);
-            if (version) {
-                setFormData(prev => ({ ...prev, version }));
-            }
+            // If there's a previous version, pre-fill it (user can increment it)
+            // If no previous version, set initial version to '1.0.0'
+            setFormData(prev => ({
+                ...prev,
+                version: version || '1.0.0'
+            }));
         } catch (error) {
             console.error('Failed to fetch latest version:', error);
             setLastVersion(null);
+            setFormData(prev => ({ ...prev, version: '1.0.0' }));
         }
     };
 
@@ -124,7 +141,7 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
-    const handleCreate = async () => {
+    const handleSubmit = async () => {
         if (!formData.project_id || !formData.version || !formData.title) {
             toast.error('Please fill in all required fields');
             return;
@@ -132,18 +149,73 @@ const ReleaseNotes: React.FC = () => {
 
         setLoading(true);
         try {
-            await releaseNotesApi.create(formData);
-            toast.success('Release note created successfully');
+            if (isEditing && currentNoteId) {
+                // Ensure we don't send project_id for update
+                const { project_id, ...updateData } = formData;
+                await releaseNotesApi.update(currentNoteId, updateData);
+                toast.success('Release note updated successfully');
+            } else {
+                await releaseNotesApi.create(formData);
+                toast.success('Release note created successfully');
+            }
             setShowModal(false);
             resetForm();
             loadReleaseNotes();
         } catch (error: any) {
-            toast.error(error.response?.data?.detail || 'Failed to create release note');
+            console.error(`Error ${isEditing ? 'updating' : 'creating'} release note:`, error);
+
+            // Better error message handling for validation errors
+            let errorMessage = `Failed to ${isEditing ? 'update' : 'create'} release note`;
+            if (error.response?.data?.detail) {
+                const detail = error.response.data.detail;
+                if (Array.isArray(detail)) {
+                    errorMessage = detail.map(err => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ');
+                } else {
+                    errorMessage = detail;
+                }
+            }
+
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
+    const handleEdit = (note: ReleaseNote) => {
+        setIsEditing(true);
+        setCurrentNoteId(note.id);
+        setFormData({
+            project_id: note.project_id,
+            version: note.version,
+            title: note.title,
+            release_date: note.release_date,
+            release_type: note.release_type as any,
+            start_sprint: (note as any).start_sprint || null,
+            end_sprint: (note as any).end_sprint || null,
+            content: note.content,
+            summary: note.summary || ''
+        });
+        setHasGeneratedContent(true);
+        setShowModal(true);
+    };
+
+    const handleUpdateContent = (category: keyof ReleaseNoteContent, action: 'add' | 'remove' | 'edit', index?: number, value?: string) => {
+        setFormData(prev => {
+            const updatedContent = { ...prev.content };
+            const list = [...(updatedContent[category] || [])];
+
+            if (action === 'add' && value) {
+                list.push(value);
+            } else if (action === 'remove' && index !== undefined) {
+                list.splice(index, 1);
+            } else if (action === 'edit' && index !== undefined && value !== undefined) {
+                list[index] = value;
+            }
+
+            updatedContent[category] = list;
+            return { ...prev, content: updatedContent };
+        });
+    };
     const generateAIContent = async (targetFormData: typeof formData) => {
         if (!targetFormData.project_id || (!targetFormData.start_sprint && !targetFormData.end_sprint)) {
             toast.error('Please select a project and sprint range');
@@ -246,6 +318,51 @@ const ReleaseNotes: React.FC = () => {
         }
     };
 
+    const handleShareOfficialNote = async (note: ReleaseNote) => {
+        const confirmShare = confirm(`Official Share: Broadcast Release v${note.version} [${note.title}] to ALL active users?`);
+        if (!confirmShare) return;
+
+        const toastId = toast.loading('Initiating global broadcast synthesis...');
+
+        try {
+            const projectName = projects.find(p => p.project_id === note.project_id)?.project_name || 'System';
+
+            // Construct the structured body that the backend parser expects
+            const structuredBody = JSON.stringify({
+                summary: note.summary,
+                features: note.content.features || [],
+                improvements: note.content.improvements || [],
+                bug_fixes: note.content.bug_fixes || [],
+                known_issues: note.content.known_issues || []
+            });
+
+            const payload = {
+                type: DowntimeType.FEATURE_UPGRADE,
+                priority: note.release_type === 'MAJOR' ? Priority.HIGH : Priority.MEDIUM,
+                affected_components: ["System Services", projectName],
+                schedule: {
+                    start_time: new Date().toISOString(),
+                    end_time: new Date().toISOString(),
+                    timezone: "Asia/Colombo"
+                },
+                audience: Audience.ALL_USERS,
+                project_id: note.project_id,
+                content: {
+                    subject: note.title,
+                    message_body: structuredBody
+                }
+            };
+
+            await notificationsApi.sendDowntimeNotification(payload as any);
+            toast.dismiss(toastId);
+            toast.success('Official Release distributed successfully! 📨');
+        } catch (error: any) {
+            console.error('Failed to share release note:', error);
+            toast.dismiss(toastId);
+            toast.error('Failed to distribute release documentation.');
+        }
+    };
+
     const handleConvertFromBacklog = async (item: BacklogRelease) => {
         // Pre-fill form data from backlog item
         const initialFormData = {
@@ -267,6 +384,8 @@ const ReleaseNotes: React.FC = () => {
         };
 
         setFormData(initialFormData);
+        setIsEditing(false);
+        setCurrentNoteId(null);
         setShowModal(true);
     };
 
@@ -364,12 +483,14 @@ const ReleaseNotes: React.FC = () => {
             summary: ''
         });
         setHasGeneratedContent(false);
+        setIsEditing(false);
+        setCurrentNoteId(null);
     };
 
     return (
         <div className="p-4 max-w-7xl mx-auto">
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center w-full mb-4">
                 <div>
                     <h1 className="text-lg font-medium text-gray-900 mb-1">
                         Release Notes
@@ -422,14 +543,13 @@ const ReleaseNotes: React.FC = () => {
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500 text-center">Sprint</th>
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500">Summary</th>
                                     <th className="px-3 py-2 text-xs font-bold text-gray-500">Target Date</th>
-                                    <th className="px-3 py-2 text-xs font-bold text-gray-500">Status</th>
                                     <th className="px-3 py-2 text-right text-xs font-bold text-gray-500">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {backlogReleases.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
+                                        <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">No planned releases found in backlog.</td>
                                     </tr>
                                 ) : (
                                     backlogReleases.map(item => (
@@ -457,12 +577,6 @@ const ReleaseNotes: React.FC = () => {
                                                 <div className="text-xs text-gray-600">
                                                     {item.end_date ? new Date(item.end_date).toLocaleDateString() : 'TBD'}
                                                 </div>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                <span className={`text-xs px-1.5 py-0.5 rounded ${item.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                    {item.status}
-                                                </span>
                                             </td>
                                             <td className="px-3 py-2 text-right">
                                                 <div className="flex items-center justify-end gap-2">
@@ -579,10 +693,26 @@ const ReleaseNotes: React.FC = () => {
                                                 >
                                                     👁️
                                                 </button>
+                                                <button
+                                                    onClick={() => handleEdit(note)}
+                                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                                    title="Edit Note"
+                                                >
+                                                    <Edit3 size={16} />
+                                                </button>
+                                                {note.status === 'PUBLISHED' && (
+                                                    <button
+                                                        onClick={() => handleShareOfficialNote(note)}
+                                                        className="p-1 text-gray-400 hover:text-emerald-600 transition-colors"
+                                                        title="Share Report (Email Broadcast)"
+                                                    >
+                                                        <Send size={15} />
+                                                    </button>
+                                                )}
                                                 {note.status === 'DRAFT' && (
                                                     <button
                                                         onClick={() => handlePublish(note.id)}
-                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs"
+                                                        className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-600 hover:text-white transition-all text-xs font-semibold"
                                                     >
                                                         Publish
                                                     </button>
@@ -610,7 +740,7 @@ const ReleaseNotes: React.FC = () => {
                     <div className="bg-white rounded-xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         {/* Modal Header */}
                         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-20">
-                            <h2 className="text-xl font-bold text-gray-900">Create Release Note</h2>
+                            <h2 className="text-xl font-bold text-gray-900">{isEditing ? 'Edit Release Note' : 'Create Release Note'}</h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                         </div>
                         {/* Modal Body */}
@@ -662,7 +792,7 @@ const ReleaseNotes: React.FC = () => {
                                     </div>
                                     <input
                                         type="text"
-                                        placeholder="1.2.0"
+                                        placeholder="1.0.0"
                                         value={formData.version}
                                         onChange={(e) => setFormData({ ...formData, version: e.target.value })}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition-all outline-none"
@@ -763,83 +893,139 @@ const ReleaseNotes: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Generated Content Display */}
-                            {hasGeneratedContent && (
+                            {/* Manual & AI Content Section */}
+                            {formData.project_id > 0 && (
                                 <div className="space-y-6">
-                                    {/* New Features */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">✨ New Features</label>
-                                        {formData.content.features.length > 0 ? (
-                                            <div className="bg-blue-50 rounded-lg p-4">
-                                                <ul className="space-y-2">
-                                                    {formData.content.features.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-blue-800">
-                                                            <span className="text-blue-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                                    {(['features', 'bug_fixes', 'improvements', 'breaking_changes', 'known_issues'] as const).map((category) => (
+                                        <div key={category} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                                            <div className={`px-4 py-2 flex justify-between items-center ${category === 'features' ? 'bg-blue-50/50' :
+                                                category === 'bug_fixes' ? 'bg-green-50/50' :
+                                                    category === 'breaking_changes' ? 'bg-amber-50/50' :
+                                                        category === 'known_issues' ? 'bg-gray-50/50' :
+                                                            'bg-purple-50/50'
+                                                }`}>
+                                                <label className="text-sm font-bold text-gray-800 capitalize flex items-center gap-2">
+                                                    {category === 'features' ? '✨ New Features' :
+                                                        category === 'bug_fixes' ? '🐛 Bug Fixes' :
+                                                            category === 'improvements' ? '⚡ Improvements' :
+                                                                category === 'breaking_changes' ? '⚠️ Breaking Changes' :
+                                                                    '🔍 Known Issues'}
+                                                    <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-gray-200 font-bold ml-1">
+                                                        {formData.content[category].length}
+                                                    </span>
+                                                </label>
                                             </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No new features found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
 
-                                    {/* Bug Fixes */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">🐛 Bug Fixes</label>
-                                        {formData.content.bug_fixes.length > 0 ? (
-                                            <div className="bg-green-50 rounded-lg p-4">
-                                                <ul className="space-y-2">
-                                                    {formData.content.bug_fixes.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-green-800">
-                                                            <span className="text-green-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No bug fixes found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
+                                            <div className="p-4 space-y-3">
+                                                {/* Edit Form */}
+                                                {editingItem && editingItem.category === category ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={editingItem.value}
+                                                            onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                                                            className={`flex-1 px-3 py-1.5 border rounded-lg text-sm outline-none ring-2 ${category === 'breaking_changes' ? 'border-amber-300 ring-amber-100' : 'border-blue-300 ring-blue-100'
+                                                                }`}
+                                                            autoFocus
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                handleUpdateContent(category, 'edit', editingItem.index, editingItem.value);
+                                                                setEditingItem(null);
+                                                            }}
+                                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditingItem(null)}
+                                                            className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder={`Add a new ${category.replace('_', ' ')}...`}
+                                                            value={newItemInputs[category]}
+                                                            onChange={(e) => setNewItemInputs({ ...newItemInputs, [category]: e.target.value })}
+                                                            onKeyPress={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    handleUpdateContent(category, 'add', undefined, newItemInputs[category]);
+                                                                    setNewItemInputs({ ...newItemInputs, [category]: '' });
+                                                                }
+                                                            }}
+                                                            className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                if (newItemInputs[category]) {
+                                                                    handleUpdateContent(category, 'add', undefined, newItemInputs[category]);
+                                                                    setNewItemInputs({ ...newItemInputs, [category]: '' });
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </div>
+                                                )}
 
-                                    {/* Improvements */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">⚡ Improvements</label>
-                                        {formData.content.improvements.length > 0 ? (
-                                            <div className="bg-purple-50 rounded-lg p-4">
+                                                {/* List of Items */}
                                                 <ul className="space-y-2">
-                                                    {formData.content.improvements.map((item, i) => (
-                                                        <li key={i} className="flex items-start gap-2 text-purple-800">
-                                                            <span className="text-purple-500 mt-0.5">•</span>
-                                                            <span className="text-sm">{item}</span>
+                                                    {formData.content[category].map((item, i) => (
+                                                        <li key={i} className="group flex items-center justify-between gap-3 p-2 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition-all">
+                                                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                                <span className={`${category === 'features' ? 'text-blue-500' :
+                                                                    category === 'bug_fixes' ? 'text-green-500' :
+                                                                        category === 'breaking_changes' ? 'text-amber-500' :
+                                                                            category === 'known_issues' ? 'text-gray-400' :
+                                                                                'text-purple-500'
+                                                                    } mt-1 flex-shrink-0 text-[10px]`}>●</span>
+                                                                <span className="text-sm text-gray-700 break-words leading-relaxed">{item}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => setEditingItem({ category, index: i, value: item })}
+                                                                    className="p-1 px-2 text-[10px] font-bold text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleUpdateContent(category, 'remove', i)}
+                                                                    className="p-1 px-2 text-[10px] font-bold text-red-600 bg-red-50 rounded hover:bg-red-100"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
                                                         </li>
                                                     ))}
+                                                    {formData.content[category].length === 0 && (
+                                                        <div className="py-2 text-center text-gray-400 text-[11px] italic">
+                                                            No items added to this category yet.
+                                                        </div>
+                                                    )}
                                                 </ul>
                                             </div>
-                                        ) : (
-                                            <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500 text-sm">
-                                                No improvements found in completed sprint items
-                                            </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
                         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 z-10">
                             <button onClick={() => setShowModal(false)} className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
                             <button
-                                onClick={handleCreate}
-                                disabled={loading || !hasGeneratedContent}
+                                onClick={handleSubmit}
+                                disabled={loading || (!hasGeneratedContent &&
+                                    (formData.content.features?.length || 0) === 0 &&
+                                    (formData.content.bug_fixes?.length || 0) === 0 &&
+                                    (formData.content.improvements?.length || 0) === 0)}
                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={!hasGeneratedContent ? 'Generate AI content first' : ''}
+                                title={(!hasGeneratedContent && (formData.content.features?.length || 0) === 0 && (formData.content.bug_fixes?.length || 0) === 0 && (formData.content.improvements?.length || 0) === 0) ? 'Generate AI content or add items manually' : ''}
                             >
-                                {loading ? 'Creating...' : 'Create Release Note'}
+                                {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Release Note' : 'Create Release Note')}
                             </button>
                         </div>
                     </div>
@@ -1258,7 +1444,7 @@ const ReleaseNotes: React.FC = () => {
                 </div>
             )
             }
-        </div >
+        </div>
     );
 };
 

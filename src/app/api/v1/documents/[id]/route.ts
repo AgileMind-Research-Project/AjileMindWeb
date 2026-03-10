@@ -5,11 +5,11 @@
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get('authorization');
-    const { id } = params;
+    const { id } = await params;
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export async function DELETE(
     if (!response.ok) {
       const contentType = response.headers.get('content-type');
       let errorData = { detail: 'Delete failed' };
-      
+
       if (contentType?.includes('application/json')) {
         try {
           errorData = await response.json();

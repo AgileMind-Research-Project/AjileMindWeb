@@ -44,13 +44,15 @@ export default function TaskUpdatesPage() {
                 return new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime();
             });
 
-            // Filter based on status tab
+            // Filter strictly for 'Daily Standup' meetings
             const relevantMeetings = sortedMeetings.filter(m => {
-                const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id.toString());
+                const isDailyStandup = m.meeting_category === 'Daily Standup';
+                if (!isDailyStandup) return false;
+
                 if (filterStatus === 'ALL') return true;
+                const meetingUpdates = updatesData.filter(u => u.meeting_id === m.meeting_id.toString());
                 const hasMatchingUpdates = meetingUpdates.some(u => u.approval_status === filterStatus);
-                const hasDailyCategory = (m.meeting_category || '').toLowerCase().includes('daily') || (m.meeting_category || '').toLowerCase().includes('standup');
-                return hasMatchingUpdates || hasDailyCategory || m.transcript_content;
+                return hasMatchingUpdates || m.transcript_content;
             });
 
             setMeetings(relevantMeetings);
