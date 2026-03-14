@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, ResponsiveContainer } from 'recharts';
 import AvailableDevelopersList from './AvailableDevelopersList';
+import BurndownChart from '@/components/charts/BurndownChart';
 
 // Color palette for different parameters
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#ec4899', '#f97316', '#14b8a6', '#84cc16'];
@@ -733,6 +734,13 @@ export default function RiskParametersForm({ projectId, onSuccess }: RiskParamet
                         </div>
                     )}
                 </div>
+
+                {/* Burndown Chart Display */}
+                {selectedProjectId && (
+                    <div className="mb-6 border-0 p-0 shadow-none bg-transparent">
+                        <BurndownChart projectId={selectedProjectId as string} />
+                    </div>
+                )}
 
                 {/* Risk Status Display */}
                 {selectedProjectId && riskData && !loadingRisk && (

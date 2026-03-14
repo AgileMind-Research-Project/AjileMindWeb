@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import BurndownChart from '@/components/charts/BurndownChart';
 
 interface SprintBreakdown {
     sprint_id: number;
@@ -902,6 +903,10 @@ export default function DelayManagementDashboard() {
                 </div>
             )}
 
+            {/* ENHANCEMENT 6: Sprint Burndown Chart */}
+            {delayData && delayData.sprint_breakdown && delayData.sprint_breakdown.length > 0 && (
+                <BurndownChart projectId={selectedProject} delayData={delayData} />
+            )}
 
             {/* Sprint Breakdown Section */}
             {delayData && delayData.sprint_breakdown && delayData.sprint_breakdown.length > 0 && (
