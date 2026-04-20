@@ -28,7 +28,8 @@ export default function MyTasksPage() {
     const [tasks, setTasks] = useState<BacklogItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { user } = useAuth();
+    const [selectedStatus, setSelectedStatus] = useState<'all' | 'todo' | 'in_progress' | 'done'>('all');
+    useAuth();
 
     useEffect(() => {
         const fetchMyTasks = async () => {
@@ -84,13 +85,27 @@ export default function MyTasksPage() {
         }
     };
 
-    // Group tasks by project
-    const groupedTasks = tasks.reduce((acc, task) => {
+    const filteredTasks = tasks.filter((task) => {
+        if (selectedStatus === 'all') {
+            return true;
+        }
+        return task.status?.toLowerCase() === selectedStatus;
+    });
+
+    // Group filtered tasks by project
+    const groupedTasks = filteredTasks.reduce((acc, task) => {
         const key = task.project_name || `Project ${task.project_id}`;
         if (!acc[key]) acc[key] = [];
         acc[key].push(task);
         return acc;
     }, {} as Record<string, BacklogItem[]>);
+
+    const statusCounts = {
+        all: tasks.length,
+        todo: tasks.filter((task) => task.status?.toLowerCase() === 'todo').length,
+        in_progress: tasks.filter((task) => task.status?.toLowerCase() === 'in_progress').length,
+        done: tasks.filter((task) => task.status?.toLowerCase() === 'done').length,
+    };
 
     if (loading) {
         return (
@@ -130,13 +145,60 @@ export default function MyTasksPage() {
                     </div>
                 </div>
 
-                {tasks.length === 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSelectedStatus('all')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                            selectedStatus === 'all'
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                        All ({statusCounts.all})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedStatus('todo')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                            selectedStatus === 'todo'
+                                ? 'bg-gray-700 text-white border-gray-700'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                        Todo ({statusCounts.todo})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedStatus('in_progress')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                            selectedStatus === 'in_progress'
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                        In Progress ({statusCounts.in_progress})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedStatus('done')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                            selectedStatus === 'done'
+                                ? 'bg-green-600 text-white border-green-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                    >
+                        Done ({statusCounts.done})
+                    </button>
+                </div>
+
+                {filteredTasks.length === 0 ? (
                     <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                         <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks assigned</h3>
-                        <p className="mt-1 text-sm text-gray-500">You're all caught up! No pending tasks found.</p>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks found for this filter</h3>
+                        <p className="mt-1 text-sm text-gray-500">Try selecting another status to view your assigned tasks.</p>
                     </div>
                 ) : (
                     <div className="space-y-10">
