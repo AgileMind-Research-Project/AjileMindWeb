@@ -34,26 +34,32 @@ export default function DownTimeSender() {
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
 
-    // Form State
-    const [formData, setFormData] = useState<DowntimeNotificationRequest>({
-        type: DowntimeType.PLANNED_MAINTENANCE,
-        priority: Priority.HIGH,
-        affected_components: [],
-        schedule: {
-            start_time: formatDateTimeLocal(new Date()),
-            end_time: formatDateTimeLocal(new Date(new Date().getTime() + 2 * 60 * 60 * 1000)), // Default +2 hours
-            timezone: 'Asia/Colombo'
-        },
-        audience: Audience.ALL_USERS,
-        project_id: null,
-        content: {
-            subject: 'Scheduled Maintenance: System Upgrade',
-            message_body: 'We will be performing scheduled maintenance to improve system performance and security.'
-        },
-        scheduled_at: formatDateTimeLocal(new Date()),
-        target_roles: [],
-        include_release_note: true,
-        release_note_content: { subject: '', message_body: '' }
+    // Form State with sensible defaults to avoid immediate validation errors
+    const [formData, setFormData] = useState<DowntimeNotificationRequest>(() => {
+        const now = new Date();
+        const start = new Date(now.getTime() + 15 * 60 * 1000); // 15 mins later
+        const end = new Date(now.getTime() + 75 * 60 * 1000); // 1h 15m later
+
+        return {
+            type: DowntimeType.PLANNED_MAINTENANCE,
+            priority: Priority.HIGH,
+            affected_components: [],
+            schedule: {
+                start_time: formatDateTimeLocal(start),
+                end_time: formatDateTimeLocal(end),
+                timezone: 'Asia/Colombo'
+            },
+            audience: Audience.ALL_USERS,
+            project_id: null,
+            content: {
+                subject: 'Scheduled Maintenance: System Upgrade',
+                message_body: 'We will be performing scheduled maintenance to improve system performance and security.'
+            },
+            scheduled_at: formatDateTimeLocal(now),
+            target_roles: [],
+            include_release_note: true,
+            release_note_content: { subject: '', message_body: '' }
+        };
     });
 
     // Helper to get unique roles from project members
@@ -62,6 +68,23 @@ export default function DownTimeSender() {
         const roles = new Set(projectMembers.map(m => m.role).filter(Boolean));
         return Array.from(roles);
     }, [projectMembers]);
+
+    // Timing and Sequence Validation Memo
+    const timingValidation = React.useMemo(() => {
+        const start = new Date(formData.schedule.start_time);
+        const end = new Date(formData.schedule.end_time);
+        const scheduled = formData.scheduled_at ? new Date(formData.scheduled_at) : null;
+
+        const errors = {
+            startVsEnd: start && end && start >= end ? 'Start Time must be earlier than Estimated End Time.' : null,
+            scheduledVsStart: scheduled && start && scheduled >= start ? 'Schedule Send Time must be earlier than Start Time.' : null
+        };
+
+        return {
+            ...errors,
+            isValid: !errors.startVsEnd && !errors.scheduledVsStart
+        };
+    }, [formData.schedule.start_time, formData.schedule.end_time, formData.scheduled_at]);
 
     const COMPONENTS = [
         'All Systems', 'Payment Gateway', 'User Dashboard', 'API', 'Reporting Module', 'Authentication'
@@ -265,15 +288,39 @@ export default function DownTimeSender() {
             target_emails: selectedEmails.length > 0 ? selectedEmails : undefined
         };
 
+        const now = new Date();
+        const start = new Date(formData.schedule.start_time);
+        const end = new Date(formData.schedule.end_time);
+
         if (immediate) {
             delete (payload as any).scheduled_at;
+
+            // For immediate send, logical send time is NOW.
+            // Rule: Send Time < Start Time
+            if (now >= start) {
+                toast.error('The maintenance Start Time must be later than the current time for a new broadcast.');
+                return;
+            }
+
+            if (start >= end) {
+                toast.error('Start Time must be earlier than the Estimated End Time.');
+                return;
+            }
         } else {
             if (!formData.scheduled_at) {
                 toast.error('Please select a "Schedule Send Time" to schedule.');
                 return;
             }
-            if (new Date(formData.scheduled_at) >= new Date(formData.schedule.start_time)) {
+
+            const scheduled = new Date(formData.scheduled_at);
+
+            if (scheduled >= start) {
                 toast.error('Schedule Send Time must be earlier than the maintenance Start Time.');
+                return;
+            }
+
+            if (start >= end) {
+                toast.error('Start Time must be earlier than the Estimated End Time.');
                 return;
             }
         }
@@ -631,8 +678,12 @@ export default function DownTimeSender() {
                                             ...formData,
                                             schedule: { ...formData.schedule, start_time: e.target.value }
                                         })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
+                                        className={`w-full px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30
+                                            ${timingValidation.startVsEnd ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                                     />
+                                    {timingValidation.startVsEnd && (
+                                        <div className="text-[9px] text-red-500 font-bold mt-0.5 leading-tight">{timingValidation.startVsEnd}</div>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1 tracking-tight">Estimated End Time</label>
@@ -643,7 +694,8 @@ export default function DownTimeSender() {
                                             ...formData,
                                             schedule: { ...formData.schedule, end_time: e.target.value }
                                         })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
+                                        className={`w-full px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30
+                                            ${timingValidation.startVsEnd ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                                     />
                                 </div>
                                 <div>
@@ -652,8 +704,12 @@ export default function DownTimeSender() {
                                         type="datetime-local"
                                         value={formData.scheduled_at || ''}
                                         onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30"
+                                        className={`w-full px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50/30
+                                            ${timingValidation.scheduledVsStart ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`}
                                     />
+                                    {timingValidation.scheduledVsStart && (
+                                        <div className="text-[9px] text-red-500 font-bold mt-0.5 leading-tight">{timingValidation.scheduledVsStart}</div>
+                                    )}
                                 </div>
                             </div>
 
