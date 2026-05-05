@@ -395,11 +395,50 @@ export default function ProjectEventBoard() {
                     }
                 }
             } else {
-                // ── Sprint Planning: original flow — sync tasks + start sprint ──
-                const taskIds = extractedData.tasks
-                    .map(t => t.task_id)
-                    .filter((id): id is string => Boolean(id));
+                // ── Sprint Planning: automated sprint preparation + sync ────────
+                let targetSprintId = selectedSprintId;
 
+                // 1. If no sprint is selected, automatically identify or create the next one
+                if (!targetSprintId && selectedProjectId) {
+                    try {
+                        const prepareRes = await fetchWithAuth(
+                            `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/prepare`,
+                            { method: 'POST' }
+                        );
+                        if (prepareRes.ok) {
+                            const prepareData = await prepareRes.json();
+                            const nextSprint = prepareData.data;
+                            if (nextSprint) {
+                                targetSprintId = nextSprint.id;
+                                setSelectedSprintId(targetSprintId);
+                                
+                                // Update local sprints list so the UI reflects the new sprint
+                                setSprints(prev => {
+                                    if (prev.some(s => s.sprint_id === nextSprint.id)) return prev;
+                                    return [{
+                                        sprint_id: nextSprint.id,
+                                        sprint_name: nextSprint.name,
+                                        sprint_status: nextSprint.state || 'Future'
+                                    }, ...prev];
+                                });
+                            }
+                        } else {
+                            const errData = await prepareRes.json();
+                            alert(`Sprint Preparation Failed: ${errData.detail || 'Unknown error'}`);
+                        }
+                    } catch (err) {
+                        console.error('Failed to auto-prepare next sprint:', err);
+                        alert('Failed to automatically identify or create the next sprint. Please ensure Jira integration is active.');
+                    }
+                }
+
+                if (!targetSprintId) {
+                    alert('Please select a sprint or ensure Jira integration is active.');
+                    setIsSyncing(false);
+                    return;
+                }
+
+                // 2. Sync tasks to the identified sprint
                 const res = await fetchWithAuth(
                     `${API_CONFIG.baseURL}/api/v1/meetings/${selectedMeetingId}/sync-tasks`,
                     {
@@ -408,28 +447,41 @@ export default function ProjectEventBoard() {
                         body: JSON.stringify({
                             tasks: extractedData.tasks,
                             project_id: selectedProjectId,
-                            sprint_id: selectedSprintId,
+                            sprint_id: targetSprintId,
                         }),
                     }
                 );
+                
                 if (res.ok) {
                     setTasksSynced(true);
-                    if (selectedProjectId && selectedSprintId) {
+                    
+                    // Collect Jira keys from the response (especially important for NEW tasks)
+                    const syncData = await res.json();
+                    const syncedResults = syncData.results || [];
+                    const allTaskIds = syncedResults
+                        .map((r: any) => r.jira_key)
+                        .filter((id: string) => Boolean(id));
+
+                    // 3. Activate the sprint in Jira and DB
+                    if (selectedProjectId && targetSprintId) {
                         try {
                             const startRes = await fetchWithAuth(
-                                `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/${selectedSprintId}/start`,
+                                `${API_CONFIG.baseURL}/api/v1/projects/${selectedProjectId}/sprints/${targetSprintId}/start`,
                                 {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ task_ids: taskIds }),
+                                    body: JSON.stringify({ task_ids: allTaskIds }),
                                 }
                             );
                             if (startRes.ok) {
                                 const startData = await startRes.json();
                                 const updatedSprint = startData?.data;
-                                setSprints(prev =>
-                                    prev.map(s =>
-                                        s.sprint_id === selectedSprintId
+                                const nextSprint = startData?.next_sprint;
+
+                                setSprints(prev => {
+                                    // 1. Update the current active sprint
+                                    let newSprints = prev.map(s =>
+                                        s.sprint_id === targetSprintId
                                             ? {
                                                 ...s,
                                                 sprint_status: updatedSprint?.sprint_status ?? 'Active',
@@ -437,11 +489,24 @@ export default function ProjectEventBoard() {
                                                 end_date: updatedSprint?.end_date ?? s.end_date,
                                             }
                                             : s
-                                    )
-                                );
+                                    );
+
+                                    // 2. Add the next prepared sprint if it's missing
+                                    if (nextSprint && !newSprints.find(s => s.sprint_id === nextSprint.id)) {
+                                        newSprints.push({
+                                            sprint_id: nextSprint.id,
+                                            project_id: selectedProjectId,
+                                            sprint_name: nextSprint.name,
+                                            sprint_status: 'Future',
+                                            start_date: '', // Will be updated on actual load
+                                            end_date: ''
+                                        });
+                                    }
+                                    return newSprints;
+                                });
                             }
-                        } catch {
-                            // non-fatal
+                        } catch (err) {
+                            console.error('Non-fatal: failed to start sprint in Jira', err);
                         }
                     }
                 }
